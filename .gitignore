@@ -28,3 +28,7 @@ node_modules/
 # Temporary files
 *.tmp
 *.temp
+
+# Development documentation (not for distribution)
+CLAUDE.md
+CLAUDE/

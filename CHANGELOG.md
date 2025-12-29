@@ -5,7 +5,7 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.1] - 2025-12-29
+## [1.1.0] - 2025-12-29
 
 ### Added
 - **Wallet validation in admin panel** - Real-time status display showing:
@@ -56,18 +56,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Roadmap
 
-### [1.1.0] - Planned
+### [1.2.0] - Planned
 - QR code display for payment address
 - Admin dashboard with payment statistics
 - Manual payment check button in order admin
-- Support for additional currencies (EUR, GBP)
 
-### [1.2.0] - Planned
-- Multi-chain support (BSC wREAL8)
+### [1.3.0] - Planned
+- Support for additional currencies (EUR, GBP)
 - Webhook notifications for payment events
 - Partial payment handling
 
 ### [2.0.0] - Planned
-- Full multi-chain support (Base, Optimism, Solana)
+- Multi-chain support (BSC, Base, Optimism wREAL8)
 - Automatic refund processing
 - Integration with WooCommerce Subscriptions
