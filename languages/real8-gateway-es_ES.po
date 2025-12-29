@@ -1,0 +1,344 @@
+# Spanish (Spain) translation for REAL8 Gateway for WooCommerce
+# Copyright (C) 2025 REAL8
+# This file is distributed under the GPL v2 or later.
+msgid ""
+msgstr ""
+"Project-Id-Version: REAL8 Gateway for WooCommerce 2.0.0\n"
+"Report-Msgid-Bugs-To: https://github.com/REAL8-crypto/real8-gateway/issues\n"
+"POT-Creation-Date: 2025-12-29 22:00+0000\n"
+"PO-Revision-Date: 2025-12-29 22:00+0000\n"
+"Last-Translator: REAL8 <info@real8.org>\n"
+"Language-Team: Spanish <es@li.org>\n"
+"Language: es_ES\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: real8-gateway.php:82
+msgid "REAL8 Gateway requires WooCommerce to be installed and active."
+msgstr "REAL8 Gateway requiere que WooCommerce esté instalado y activo."
+
+#: real8-gateway.php:117
+msgid "Settings"
+msgstr "Ajustes"
+
+#: real8-gateway.php:215
+msgid "Every Minute"
+msgstr "Cada minuto"
+
+#: includes/class-payment-gateway.php:29
+msgid "REAL8 Payment"
+msgstr "Pago con REAL8"
+
+#: includes/class-payment-gateway.php:30
+msgid "Accept payments in REAL8 tokens on the Stellar network"
+msgstr "Acepta pagos en tokens REAL8 en la red Stellar"
+
+#: includes/class-payment-gateway.php:72
+msgid "Enable/Disable"
+msgstr "Activar/Desactivar"
+
+#: includes/class-payment-gateway.php:74
+msgid "Enable REAL8 Payment"
+msgstr "Activar pago con REAL8"
+
+#: includes/class-payment-gateway.php:78
+msgid "Title"
+msgstr "Título"
+
+#: includes/class-payment-gateway.php:80
+msgid "Payment method title displayed to customers"
+msgstr "Título del método de pago mostrado a los clientes"
+
+#: includes/class-payment-gateway.php:81
+msgid "Pay with REAL8"
+msgstr "Pagar con REAL8"
+
+#: includes/class-payment-gateway.php:85
+msgid "Description"
+msgstr "Descripción"
+
+#: includes/class-payment-gateway.php:87
+msgid "Payment method description displayed during checkout"
+msgstr "Descripción del método de pago mostrada durante el proceso de compra"
+
+#: includes/class-payment-gateway.php:88
+msgid "Pay with REAL8 tokens on the Stellar blockchain. Fast, secure, and low fees."
+msgstr "Paga con tokens REAL8 en la blockchain Stellar. Rápido, seguro y con bajas comisiones."
+
+#: includes/class-payment-gateway.php:92
+msgid "Merchant Stellar Address"
+msgstr "Dirección Stellar del comerciante"
+
+#: includes/class-payment-gateway.php:94
+msgid "Your Stellar public key (starts with G) where REAL8 payments will be received. Each merchant needs their own Stellar wallet with REAL8 trustline."
+msgstr "Tu clave pública Stellar (comienza con G) donde se recibirán los pagos en REAL8. Cada comerciante necesita su propia billetera Stellar con trustline de REAL8."
+
+#: includes/class-payment-gateway.php:99
+msgid "Payment Timeout (minutes)"
+msgstr "Tiempo límite de pago (minutos)"
+
+#: includes/class-payment-gateway.php:101
+msgid "How long customers have to complete payment. Default: 30 minutes."
+msgstr "Tiempo que tienen los clientes para completar el pago. Por defecto: 30 minutos."
+
+#: includes/class-payment-gateway.php:110
+msgid "Price Buffer (%)"
+msgstr "Margen de precio (%)"
+
+#: includes/class-payment-gateway.php:112
+msgid "Buffer percentage to account for price volatility. Customers pay this % more in REAL8. Default: 2%."
+msgstr "Porcentaje de margen para compensar la volatilidad del precio. Los clientes pagan este % adicional en REAL8. Por defecto: 2%."
+
+#: includes/class-payment-gateway.php:122
+#: includes/class-payment-gateway.php:285
+msgid "Payment Instructions"
+msgstr "Instrucciones de pago"
+
+#: includes/class-payment-gateway.php:124
+msgid "Instructions shown on thank-you page and in emails. Use {amount}, {address}, {memo} as placeholders."
+msgstr "Instrucciones mostradas en la página de agradecimiento y en los correos electrónicos. Usa {amount}, {address}, {memo} como marcadores de posición."
+
+#: includes/class-payment-gateway.php:125
+msgid "Send exactly {amount} REAL8 to:\n\nAddress: {address}\nMemo (TEXT): {memo}\n\nIMPORTANT: You must include the memo exactly as shown, or your payment cannot be matched to your order."
+msgstr "Envía exactamente {amount} REAL8 a:\n\nDirección: {address}\nMemo (TEXTO): {memo}\n\nIMPORTANTE: Debes incluir el memo exactamente como se muestra, o tu pago no podrá ser asociado a tu pedido."
+
+#: includes/class-payment-gateway.php:141
+msgid "Invalid Stellar address. Must be 56 characters starting with G."
+msgstr "Dirección Stellar inválida. Debe tener 56 caracteres y comenzar con G."
+
+#: includes/class-payment-gateway.php:147
+msgid "This Stellar address does not have a REAL8 trustline. Please add the trustline first."
+msgstr "Esta dirección Stellar no tiene trustline de REAL8. Por favor, añade el trustline primero."
+
+#: includes/class-payment-gateway.php:180
+msgid "Unable to process REAL8 payment. Please try again or choose another payment method."
+msgstr "No se pudo procesar el pago con REAL8. Por favor, inténtalo de nuevo o elige otro método de pago."
+
+#: includes/class-payment-gateway.php:216
+msgid "Awaiting REAL8 payment"
+msgstr "Esperando pago en REAL8"
+
+#: includes/class-payment-gateway.php:319
+msgid "Checking payment status..."
+msgstr "Verificando estado del pago..."
+
+#: includes/class-payment-gateway.php:320
+msgid "Payment received! Redirecting..."
+msgstr "¡Pago recibido! Redirigiendo..."
+
+#: includes/class-payment-gateway.php:321
+msgid "Payment window expired"
+msgstr "Ventana de pago expirada"
+
+#: includes/class-payment-gateway.php:322
+msgid "Error checking payment"
+msgstr "Error al verificar el pago"
+
+#: includes/class-payment-gateway.php:361
+msgid "REAL8 payment expired"
+msgstr "Pago REAL8 expirado"
+
+#: includes/class-payment-gateway.php:365
+msgid "Payment window has expired"
+msgstr "La ventana de pago ha expirado"
+
+#: includes/class-payment-gateway.php:426
+msgid "Checking wallet status..."
+msgstr "Verificando estado de la billetera..."
+
+#: includes/class-payment-gateway.php:427
+msgid "Valid"
+msgstr "Válida"
+
+#: includes/class-payment-gateway.php:428
+msgid "Invalid"
+msgstr "Inválida"
+
+#: includes/class-payment-gateway.php:477
+msgid "How to set up your merchant wallet:"
+msgstr "Cómo configurar tu billetera de comerciante:"
+
+#: includes/class-payment-gateway.php:479
+msgid "Create a Stellar wallet (use Lobstr, Solar, or any Stellar wallet)"
+msgstr "Crea una billetera Stellar (usa Lobstr, Solar, o cualquier billetera Stellar)"
+
+#: includes/class-payment-gateway.php:480
+msgid "Fund it with at least 1.5 XLM (for account reserve)"
+msgstr "Fóndela con al menos 1.5 XLM (para la reserva de cuenta)"
+
+#: includes/class-payment-gateway.php:481
+msgid "Add REAL8 trustline:"
+msgstr "Añade el trustline de REAL8:"
+
+#: includes/class-payment-gateway.php:484
+msgid "Paste your public key (starts with G) above"
+msgstr "Pega tu clave pública (comienza con G) arriba"
+
+#: includes/class-payment-gateway.php:575
+msgid "No wallet address configured. Enter your Stellar public key above."
+msgstr "No hay dirección de billetera configurada. Introduce tu clave pública Stellar arriba."
+
+#: includes/class-payment-gateway.php:582
+msgid "Invalid address format. Stellar addresses are 56 characters starting with G."
+msgstr "Formato de dirección inválido. Las direcciones Stellar tienen 56 caracteres y comienzan con G."
+
+#: includes/class-payment-gateway.php:589
+msgid "Wallet not found on Stellar network. Make sure the account exists and is funded with at least 1 XLM."
+msgstr "Billetera no encontrada en la red Stellar. Asegúrate de que la cuenta existe y está fondeada con al menos 1 XLM."
+
+#: includes/class-payment-gateway.php:596
+msgid "Could not verify wallet. Network error - please try again."
+msgstr "No se pudo verificar la billetera. Error de red - por favor, inténtalo de nuevo."
+
+#: includes/class-payment-gateway.php:606
+msgid "Account exists on Stellar"
+msgstr "La cuenta existe en Stellar"
+
+#: includes/class-payment-gateway.php:613
+#. translators: %s: XLM balance amount
+msgid "Funded with %s XLM"
+msgstr "Fondeada con %s XLM"
+
+#: includes/class-payment-gateway.php:618
+#. translators: %s: XLM balance amount
+msgid "Low XLM balance: %s (recommend 1.5+ XLM)"
+msgstr "Saldo XLM bajo: %s (se recomienda 1.5+ XLM)"
+
+#: includes/class-payment-gateway.php:626
+#. translators: %s: REAL8 balance amount
+msgid "REAL8 trustline active (Balance: %s REAL8)"
+msgstr "Trustline REAL8 activo (Saldo: %s REAL8)"
+
+#: includes/class-payment-gateway.php:631
+msgid "REAL8 trustline missing - you cannot receive REAL8 payments!"
+msgstr "Falta el trustline de REAL8 - ¡no puedes recibir pagos en REAL8!"
+
+#: includes/class-payment-gateway.php:641
+msgid "Ready to receive REAL8 payments!"
+msgstr "¡Listo para recibir pagos en REAL8!"
+
+#: includes/class-payment-gateway.php:646
+msgid "Action required: Add REAL8 trustline to receive payments"
+msgstr "Acción requerida: Añade el trustline de REAL8 para recibir pagos"
+
+#: includes/templates/payment-instructions.php:26
+msgid "Payment Received!"
+msgstr "¡Pago recibido!"
+
+#: includes/templates/payment-instructions.php:27
+msgid "Your REAL8 payment has been confirmed. Thank you for your order!"
+msgstr "Tu pago en REAL8 ha sido confirmado. ¡Gracias por tu pedido!"
+
+#: includes/templates/payment-instructions.php:34
+msgid "Payment Expired"
+msgstr "Pago expirado"
+
+#: includes/templates/payment-instructions.php:35
+msgid "The payment window has expired. Please contact support if you made a payment."
+msgstr "La ventana de pago ha expirado. Por favor, contacta con soporte si realizaste un pago."
+
+#: includes/templates/payment-instructions.php:42
+msgid "Awaiting REAL8 Payment"
+msgstr "Esperando pago en REAL8"
+
+#: includes/templates/payment-instructions.php:46
+#. translators: %s: countdown timer
+msgid "Time remaining: %s"
+msgstr "Tiempo restante: %s"
+
+#: includes/templates/payment-instructions.php:47
+msgid "minutes"
+msgstr "minutos"
+
+#: includes/templates/payment-instructions.php:54
+msgid "Send Payment To:"
+msgstr "Enviar pago a:"
+
+#: includes/templates/payment-instructions.php:57
+msgid "Amount:"
+msgstr "Cantidad:"
+
+#: includes/templates/payment-instructions.php:60
+msgid "Copy amount"
+msgstr "Copiar cantidad"
+
+#: includes/templates/payment-instructions.php:67
+msgid "Destination Address:"
+msgstr "Dirección de destino:"
+
+#: includes/templates/payment-instructions.php:70
+msgid "Copy address"
+msgstr "Copiar dirección"
+
+#: includes/templates/payment-instructions.php:77
+msgid "Memo (TEXT - REQUIRED):"
+msgstr "Memo (TEXTO - OBLIGATORIO):"
+
+#: includes/templates/payment-instructions.php:80
+msgid "Copy memo"
+msgstr "Copiar memo"
+
+#: includes/templates/payment-instructions.php:87
+msgid "IMPORTANT:"
+msgstr "IMPORTANTE:"
+
+#: includes/templates/payment-instructions.php:88
+msgid "You MUST include the memo exactly as shown above. Without the correct memo, your payment cannot be matched to your order."
+msgstr "DEBES incluir el memo exactamente como se muestra arriba. Sin el memo correcto, tu pago no podrá ser asociado a tu pedido."
+
+#: includes/templates/payment-instructions.php:93
+msgid "REAL8 Token:"
+msgstr "Token REAL8:"
+
+#: includes/templates/payment-instructions.php:94
+msgid "Asset Code:"
+msgstr "Código del activo:"
+
+#: includes/templates/payment-instructions.php:95
+msgid "Issuer:"
+msgstr "Emisor:"
+
+#: includes/templates/payment-instructions.php:103
+msgid "Automatically checking for payment..."
+msgstr "Verificando pago automáticamente..."
+
+#: includes/templates/payment-instructions.php:108
+#. translators: %1$s: order total, %2$s: REAL8 amount
+msgid "Order Total: %s (approximately %s REAL8 at current rate)"
+msgstr "Total del pedido: %s (aproximadamente %s REAL8 al tipo de cambio actual)"
+
+#: includes/class-payment-monitor.php:115
+msgid "REAL8 payment expired - no payment received within the time limit."
+msgstr "Pago REAL8 expirado - no se recibió ningún pago dentro del tiempo límite."
+
+#: includes/class-payment-monitor.php:148
+#. translators: %1$s: REAL8 amount, %2$s: transaction hash, %3$s: sender address
+msgid "REAL8 payment confirmed! Amount: %s REAL8. TX: %s. From: %s"
+msgstr "¡Pago REAL8 confirmado! Cantidad: %s REAL8. TX: %s. Desde: %s"
+
+#: includes/class-payment-monitor.php:190
+msgid "REAL8 Gateway:"
+msgstr "REAL8 Gateway:"
+
+#: includes/class-payment-monitor.php:193
+#. translators: %1$s: opening link tag, %2$s: closing link tag
+msgid "Payment gateway is enabled but no merchant address is configured. %sGo to settings%s"
+msgstr "La pasarela de pago está activada pero no hay dirección de comerciante configurada. %sIr a ajustes%s"
+
+#: includes/class-payment-monitor.php:253
+msgid "No REAL8 payment record found for this order"
+msgstr "No se encontró registro de pago REAL8 para este pedido"
+
+#: includes/class-payment-monitor.php:257
+msgid "This order has already been paid"
+msgstr "Este pedido ya ha sido pagado"
+
+#: includes/class-payment-monitor.php:261
+msgid "This payment has expired"
+msgstr "Este pago ha expirado"
+
+#: includes/class-payment-monitor.php:268
+msgid "Merchant address not configured"
+msgstr "Dirección del comerciante no configurada"

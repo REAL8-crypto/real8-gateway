@@ -5,6 +5,23 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2025-12-29
+
+### Added
+- **Spanish translation (es_ES)** - Full translation of all plugin strings
+  - Admin panel settings and messages
+  - Checkout and payment instructions
+  - Order status messages and notifications
+  - Wallet validation messages
+- **Translation template (.pot file)** - For creating additional translations
+
+### Technical Details
+- Translation files in `/languages/` directory
+- POT template for translators
+- Compiled .mo file for Spanish (es_ES)
+
+---
+
 ## [1.1.0] - 2025-12-29
 
 ### Added
@@ -56,17 +73,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Roadmap
 
-### [1.2.0] - Planned
+### [2.1.0] - Planned
 - QR code display for payment address
 - Admin dashboard with payment statistics
 - Manual payment check button in order admin
 
-### [1.3.0] - Planned
+### [2.2.0] - Planned
 - Support for additional currencies (EUR, GBP)
 - Webhook notifications for payment events
 - Partial payment handling
+- Additional translations (French, German, Portuguese)
 
-### [2.0.0] - Planned
+### [3.0.0] - Planned
 - Multi-chain support (BSC, Base, Optimism wREAL8)
 - Automatic refund processing
 - Integration with WooCommerce Subscriptions
