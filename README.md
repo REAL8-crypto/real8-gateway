@@ -153,7 +153,7 @@ The plugin fetches real-time REAL8 prices from `https://api.real8.org/prices`.
 ## Support
 
 - Website: https://real8.org
-- Documentation: https://real8.org/docs
+- Documentation: https://api.real8.org
 - Issues: https://github.com/REAL8-crypto/real8-gateway/issues
 
 ## License
