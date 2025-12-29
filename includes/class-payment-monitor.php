@@ -1,0 +1,341 @@
+<?php
+/**
+ * Payment Monitor
+ *
+ * Handles automatic checking of pending REAL8 payments via cron
+ *
+ * @package REAL8_Gateway
+ */
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+class REAL8_Payment_Monitor {
+    private static $instance = null;
+    private $stellar_api;
+
+    public static function get_instance() {
+        if (null === self::$instance) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+
+    private function __construct() {
+        $this->stellar_api = REAL8_Stellar_Payment_API::get_instance();
+
+        // Register cron hook
+        add_action('real8_gateway_check_payments', array($this, 'check_pending_payments'));
+
+        // Admin notices
+        add_action('admin_notices', array($this, 'admin_notices'));
+    }
+
+    /**
+     * Check all pending payments
+     *
+     * This runs via cron every minute
+     */
+    public function check_pending_payments() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'real8_payments';
+
+        // Get all pending payments
+        $pending = $wpdb->get_results(
+            "SELECT * FROM $table WHERE status = 'pending' ORDER BY created_at ASC"
+        );
+
+        if (empty($pending)) {
+            return;
+        }
+
+        $gateway_settings = get_option('woocommerce_real8_payment_settings');
+        $merchant_address = isset($gateway_settings['merchant_address']) ? $gateway_settings['merchant_address'] : '';
+
+        if (empty($merchant_address)) {
+            error_log('REAL8 Gateway: No merchant address configured');
+            return;
+        }
+
+        foreach ($pending as $payment) {
+            $this->check_single_payment($payment, $merchant_address);
+        }
+    }
+
+    /**
+     * Check a single payment
+     *
+     * @param object $payment Payment record from database
+     * @param string $merchant_address Merchant's Stellar address
+     */
+    private function check_single_payment($payment, $merchant_address) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'real8_payments';
+
+        // Check if expired
+        $expires_at = strtotime($payment->expires_at);
+        if (time() > $expires_at) {
+            $this->mark_payment_expired($payment);
+            return;
+        }
+
+        // Check for payment on Stellar
+        $result = $this->stellar_api->check_payment(
+            $merchant_address,
+            $payment->memo,
+            (float) $payment->amount_real8
+        );
+
+        if ($result) {
+            $this->mark_payment_confirmed($payment, $result);
+        }
+    }
+
+    /**
+     * Mark payment as expired
+     *
+     * @param object $payment Payment record
+     */
+    private function mark_payment_expired($payment) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'real8_payments';
+
+        $wpdb->update(
+            $table,
+            array('status' => 'expired'),
+            array('id' => $payment->id),
+            array('%s'),
+            array('%d')
+        );
+
+        // Update order status
+        $order = wc_get_order($payment->order_id);
+        if ($order && $order->has_status('pending')) {
+            $order->update_status('failed', __('REAL8 payment expired - no payment received within the time limit.', 'real8-gateway'));
+        }
+
+        error_log(sprintf('REAL8 Gateway: Payment expired for order #%d', $payment->order_id));
+    }
+
+    /**
+     * Mark payment as confirmed
+     *
+     * @param object $payment Payment record
+     * @param array $result Payment result from Stellar
+     */
+    private function mark_payment_confirmed($payment, $result) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'real8_payments';
+
+        $wpdb->update(
+            $table,
+            array(
+                'status' => 'confirmed',
+                'stellar_tx_hash' => $result['tx_hash'],
+                'paid_at' => current_time('mysql', true),
+            ),
+            array('id' => $payment->id),
+            array('%s', '%s', '%s'),
+            array('%d')
+        );
+
+        // Update order
+        $order = wc_get_order($payment->order_id);
+        if ($order) {
+            // Add order note with transaction details
+            $note = sprintf(
+                __('REAL8 payment confirmed! Amount: %s REAL8. TX: %s. From: %s', 'real8-gateway'),
+                number_format($result['amount'], 7),
+                $result['tx_hash'],
+                $result['from']
+            );
+            $order->add_order_note($note);
+
+            // Save transaction details
+            $order->update_meta_data('_real8_tx_hash', $result['tx_hash']);
+            $order->update_meta_data('_real8_paid_amount', $result['amount']);
+            $order->update_meta_data('_real8_from_address', $result['from']);
+            $order->update_meta_data('_real8_paid_at', $result['created_at']);
+
+            // Mark as processing (or completed depending on settings)
+            $order->payment_complete($result['tx_hash']);
+            $order->save();
+
+            error_log(sprintf(
+                'REAL8 Gateway: Payment confirmed for order #%d - TX: %s',
+                $payment->order_id,
+                $result['tx_hash']
+            ));
+        }
+    }
+
+    /**
+     * Show admin notices for payment issues
+     */
+    public function admin_notices() {
+        // Only show on WooCommerce pages
+        $screen = get_current_screen();
+        if (!$screen || strpos($screen->id, 'woocommerce') === false) {
+            return;
+        }
+
+        // Check if gateway is enabled but not configured
+        $gateway_settings = get_option('woocommerce_real8_payment_settings');
+        if (isset($gateway_settings['enabled']) && $gateway_settings['enabled'] === 'yes') {
+            if (empty($gateway_settings['merchant_address'])) {
+                ?>
+                <div class="notice notice-warning">
+                    <p>
+                        <strong><?php esc_html_e('REAL8 Gateway:', 'real8-gateway'); ?></strong>
+                        <?php
+                        printf(
+                            esc_html__('Payment gateway is enabled but no merchant address is configured. %sGo to settings%s', 'real8-gateway'),
+                            '<a href="' . esc_url(admin_url('admin.php?page=wc-settings&tab=checkout&section=real8_payment')) . '">',
+                            '</a>'
+                        );
+                        ?>
+                    </p>
+                </div>
+                <?php
+            }
+        }
+
+        // Check for pending payments that are about to expire
+        global $wpdb;
+        $table = $wpdb->prefix . 'real8_payments';
+
+        $expiring_soon = $wpdb->get_var(
+            "SELECT COUNT(*) FROM $table
+             WHERE status = 'pending'
+             AND expires_at < DATE_ADD(NOW(), INTERVAL 5 MINUTE)
+             AND expires_at > NOW()"
+        );
+
+        if ($expiring_soon > 0) {
+            ?>
+            <div class="notice notice-info">
+                <p>
+                    <strong><?php esc_html_e('REAL8 Gateway:', 'real8-gateway'); ?></strong>
+                    <?php
+                    printf(
+                        esc_html(_n(
+                            '%d pending REAL8 payment is about to expire.',
+                            '%d pending REAL8 payments are about to expire.',
+                            $expiring_soon,
+                            'real8-gateway'
+                        )),
+                        $expiring_soon
+                    );
+                    ?>
+                </p>
+            </div>
+            <?php
+        }
+    }
+
+    /**
+     * Manual check for a specific order
+     *
+     * @param int $order_id WooCommerce order ID
+     * @return bool|WP_Error True if payment found, false if not, WP_Error on error
+     */
+    public function manual_check_order($order_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'real8_payments';
+
+        $payment = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE order_id = %d",
+            $order_id
+        ));
+
+        if (!$payment) {
+            return new WP_Error('not_found', __('No REAL8 payment record found for this order', 'real8-gateway'));
+        }
+
+        if ($payment->status === 'confirmed') {
+            return new WP_Error('already_paid', __('This order has already been paid', 'real8-gateway'));
+        }
+
+        if ($payment->status === 'expired') {
+            return new WP_Error('expired', __('This payment has expired', 'real8-gateway'));
+        }
+
+        $gateway_settings = get_option('woocommerce_real8_payment_settings');
+        $merchant_address = isset($gateway_settings['merchant_address']) ? $gateway_settings['merchant_address'] : '';
+
+        if (empty($merchant_address)) {
+            return new WP_Error('no_address', __('Merchant address not configured', 'real8-gateway'));
+        }
+
+        $result = $this->stellar_api->check_payment(
+            $merchant_address,
+            $payment->memo,
+            (float) $payment->amount_real8
+        );
+
+        if ($result) {
+            $this->mark_payment_confirmed($payment, $result);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Get pending payments count
+     *
+     * @return int Count of pending payments
+     */
+    public function get_pending_count() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'real8_payments';
+
+        return (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE status = 'pending'");
+    }
+
+    /**
+     * Get payment statistics
+     *
+     * @return array Payment statistics
+     */
+    public function get_statistics() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'real8_payments';
+
+        $stats = array(
+            'total' => 0,
+            'pending' => 0,
+            'confirmed' => 0,
+            'expired' => 0,
+            'total_real8_received' => 0,
+            'total_usd_received' => 0,
+        );
+
+        $counts = $wpdb->get_results(
+            "SELECT status, COUNT(*) as count FROM $table GROUP BY status"
+        );
+
+        foreach ($counts as $row) {
+            $stats[$row->status] = (int) $row->count;
+            $stats['total'] += (int) $row->count;
+        }
+
+        $totals = $wpdb->get_row(
+            "SELECT SUM(amount_real8) as real8, SUM(amount_usd) as usd
+             FROM $table WHERE status = 'confirmed'"
+        );
+
+        if ($totals) {
+            $stats['total_real8_received'] = (float) $totals->real8;
+            $stats['total_usd_received'] = (float) $totals->usd;
+        }
+
+        return $stats;
+    }
+}
+
+// Initialize
+add_action('init', function() {
+    REAL8_Payment_Monitor::get_instance();
+});

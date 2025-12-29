@@ -1,0 +1,30 @@
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# WordPress
+wp-config.php
+wp-content/uploads/
+wp-content/cache/
+wp-content/upgrade/
+
+# Logs
+*.log
+debug.log
+
+# Dependencies (if using Composer later)
+# vendor/
+
+# Build files
+node_modules/
+*.map
+
+# Temporary files
+*.tmp
+*.temp

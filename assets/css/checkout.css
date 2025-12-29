@@ -1,0 +1,168 @@
+/**
+ * REAL8 Gateway Checkout Styles
+ *
+ * @package REAL8_Gateway
+ */
+
+/* Payment method description */
+.payment_method_real8_payment .payment_method_description {
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+
+/* Real-time price display */
+.real8-current-price {
+    display: inline-block;
+    background: #e7f3ff;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    margin-top: 10px;
+}
+
+.real8-current-price strong {
+    color: #0066cc;
+}
+
+/* Checkout order total in REAL8 */
+.real8-order-estimate {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    padding: 15px;
+    border-radius: 8px;
+    margin: 15px 0;
+    text-align: center;
+}
+
+.real8-order-estimate .amount {
+    font-size: 1.5em;
+    font-weight: 700;
+    display: block;
+    margin: 5px 0;
+}
+
+.real8-order-estimate .note {
+    font-size: 0.85em;
+    opacity: 0.9;
+}
+
+/* Loading state */
+.real8-loading {
+    position: relative;
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.real8-loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid #ddd;
+    border-top-color: #007bff;
+    border-radius: 50%;
+    animation: real8-spin 0.8s linear infinite;
+}
+
+@keyframes real8-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Status indicator on checkout */
+.real8-gateway-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9em;
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+
+.real8-gateway-status.available {
+    background: #d4edda;
+    color: #155724;
+}
+
+.real8-gateway-status.unavailable {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.real8-gateway-status .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .real8-payment-box {
+        padding: 15px;
+    }
+
+    .real8-value {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .real8-value code {
+        width: 100%;
+        margin-bottom: 8px;
+    }
+
+    .real8-copy-btn {
+        width: 100%;
+        justify-content: center;
+        padding: 8px;
+    }
+
+    .real8-asset-info code.real8-issuer {
+        font-size: 0.65em;
+    }
+}
+
+/* Admin styles */
+.real8-admin-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+    margin: 20px 0;
+}
+
+.real8-stat-card {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+}
+
+.real8-stat-card .value {
+    font-size: 2em;
+    font-weight: 700;
+    color: #007bff;
+}
+
+.real8-stat-card .label {
+    color: #666;
+    font-size: 0.9em;
+    margin-top: 5px;
+}
+
+.real8-stat-card.success .value {
+    color: #28a745;
+}
+
+.real8-stat-card.warning .value {
+    color: #ffc107;
+}
+
+.real8-stat-card.danger .value {
+    color: #dc3545;
+}
