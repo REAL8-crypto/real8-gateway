@@ -1,5 +1,13 @@
 # REAL8 Gateway for WooCommerce
 
+![WordPress Plugin](https://img.shields.io/badge/WordPress-Plugin-blue.svg)
+![Version](https://img.shields.io/badge/version-1.0.1-green.svg)
+![License](https://img.shields.io/badge/license-GPL--2.0%2B-blue.svg)
+![PHP](https://img.shields.io/badge/PHP-7.4%2B-purple.svg)
+![WordPress](https://img.shields.io/badge/WordPress-5.8%2B-0073aa.svg)
+![WooCommerce](https://img.shields.io/badge/WooCommerce-5.0%2B-96588a.svg)
+![Stellar](https://img.shields.io/badge/Stellar-Blockchain-brightgreen.svg)
+
 Accept REAL8 token payments on the Stellar blockchain for your WooCommerce store.
 
 ## Description
@@ -10,6 +18,7 @@ REAL8 Gateway enables WooCommerce merchants to accept REAL8 tokens as payment. C
 
 - **Easy Setup**: Configure your Stellar address and start accepting payments
 - **Real-time Pricing**: Fetches current REAL8/USD price from api.real8.org
+- **Wallet Validation**: Admin panel shows wallet status (exists, funded, trustline)
 - **Automatic Detection**: Monitors the Stellar blockchain for incoming payments
 - **Unique Memos**: Each order gets a unique memo for accurate payment matching
 - **Payment Timeout**: Configurable payment window (default: 30 minutes)
@@ -33,13 +42,29 @@ REAL8 Gateway enables WooCommerce merchants to accept REAL8 tokens as payment. C
 4. Configure your merchant Stellar address
 5. Enable the payment method
 
+## Merchant Wallet Setup
+
+Each merchant needs their own Stellar wallet to receive payments:
+
+1. **Create a Stellar wallet** using [Lobstr](https://lobstr.co/), [Solar](https://solarwallet.io/), or any Stellar wallet
+2. **Fund with XLM** - at least 1.5 XLM for account reserve
+3. **Add REAL8 trustline**:
+   - Asset Code: `REAL8`
+   - Issuer: `GBVYYQ7XXRZW6ZCNNCL2X2THNPQ6IM4O47HAA25JTAG7Z3CXJCQ3W4CD`
+4. **Enter your public key** (starts with G) in the plugin settings
+
+The plugin will validate your wallet and show warnings if:
+- The account doesn't exist
+- The account is not funded
+- The REAL8 trustline is missing
+
 ## Configuration
 
 ### Required Settings
 
 | Setting | Description |
 |---------|-------------|
-| Merchant Stellar Address | Your Stellar public key (G...) where payments will be received. Must have REAL8 trustline. |
+| Merchant Stellar Address | Your Stellar public key (G...) where REAL8 payments will be received. |
 
 ### Optional Settings
 
@@ -119,16 +144,11 @@ The plugin fetches real-time REAL8 prices from `https://api.real8.org/prices`.
 2. Ensure the gateway is enabled
 3. Check that your Stellar address has REAL8 trustline
 
-## Changelog
+### Admin shows "Wallet not found"
 
-### 1.0.0 (2025-12-29)
-- Initial release
-- Stellar REAL8 payment support
-- Automatic payment detection via cron
-- Real-time pricing from api.real8.org
-- Payment timeout and expiration handling
-- Copy-to-clipboard for payment details
-- Email payment instructions
+1. Ensure the Stellar account is funded with at least 1 XLM
+2. Wait a few seconds and refresh - new accounts take time to propagate
+3. Check the address format (56 characters, starts with G)
 
 ## Support
 
@@ -143,4 +163,3 @@ GPL v2 or later
 ## Credits
 
 Developed by [REAL8](https://real8.org)
-

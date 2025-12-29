@@ -54,6 +54,7 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
         add_action('woocommerce_thankyou_' . $this->id, array($this, 'thankyou_page'));
         add_action('woocommerce_email_before_order_table', array($this, 'email_instructions'), 10, 3);
         add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
+        add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
 
         // AJAX handlers
         add_action('wp_ajax_real8_check_payment_status', array($this, 'ajax_check_payment_status'));
@@ -89,14 +90,10 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
             ),
             'merchant_address' => array(
                 'title' => __('Merchant Stellar Address', 'real8-gateway'),
-                'type' => 'text',
-                'description' => __('Your Stellar public key (starts with G) where REAL8 payments will be received. Must have REAL8 trustline.', 'real8-gateway'),
+                'type' => 'merchant_address',
+                'description' => __('Your Stellar public key (starts with G) where REAL8 payments will be received. Each merchant needs their own Stellar wallet with REAL8 trustline.', 'real8-gateway'),
                 'default' => '',
-                'desc_tip' => true,
-                'custom_attributes' => array(
-                    'placeholder' => 'GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
-                    'maxlength' => 56,
-                ),
+                'desc_tip' => false,
             ),
             'payment_timeout' => array(
                 'title' => __('Payment Timeout (minutes)', 'real8-gateway'),
@@ -393,5 +390,263 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
             'price' => $price,
             'formatted' => '$' . number_format($price, 6),
         ));
+    }
+
+    /**
+     * Enqueue admin scripts and styles
+     */
+    public function enqueue_admin_scripts($hook) {
+        if ('woocommerce_page_wc-settings' !== $hook) {
+            return;
+        }
+
+        if (!isset($_GET['section']) || $_GET['section'] !== 'real8_payment') {
+            return;
+        }
+
+        wp_enqueue_style(
+            'real8-gateway-admin',
+            REAL8_GATEWAY_PLUGIN_URL . 'assets/css/admin.css',
+            array(),
+            REAL8_GATEWAY_VERSION
+        );
+
+        wp_enqueue_script(
+            'real8-gateway-admin',
+            REAL8_GATEWAY_PLUGIN_URL . 'assets/js/admin.js',
+            array('jquery'),
+            REAL8_GATEWAY_VERSION,
+            true
+        );
+
+        wp_localize_script('real8-gateway-admin', 'real8_admin', array(
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('real8_admin_nonce'),
+            'strings' => array(
+                'checking' => __('Checking wallet status...', 'real8-gateway'),
+                'valid' => __('Valid', 'real8-gateway'),
+                'invalid' => __('Invalid', 'real8-gateway'),
+            ),
+        ));
+    }
+
+    /**
+     * Generate custom field HTML for merchant address
+     */
+    public function generate_merchant_address_html($key, $data) {
+        $field_key = $this->get_field_key($key);
+        $defaults = array(
+            'title' => '',
+            'description' => '',
+            'default' => '',
+        );
+
+        $data = wp_parse_args($data, $defaults);
+        $value = $this->get_option($key);
+
+        // Check wallet status
+        $wallet_status = $this->check_wallet_status($value);
+
+        ob_start();
+        ?>
+        <tr valign="top">
+            <th scope="row" class="titledesc">
+                <label for="<?php echo esc_attr($field_key); ?>"><?php echo wp_kses_post($data['title']); ?></label>
+            </th>
+            <td class="forminp">
+                <fieldset>
+                    <legend class="screen-reader-text"><span><?php echo wp_kses_post($data['title']); ?></span></legend>
+                    <input type="text"
+                           class="input-text regular-input"
+                           name="<?php echo esc_attr($field_key); ?>"
+                           id="<?php echo esc_attr($field_key); ?>"
+                           style="width: 450px; font-family: monospace;"
+                           value="<?php echo esc_attr($value); ?>"
+                           placeholder="GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+                           maxlength="56" />
+
+                    <div id="real8-wallet-status" class="real8-wallet-status" style="margin-top: 10px;">
+                        <?php echo $this->render_wallet_status($wallet_status); ?>
+                    </div>
+
+                    <p class="description">
+                        <?php echo wp_kses_post($data['description']); ?>
+                    </p>
+
+                    <div class="real8-wallet-help" style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-left: 4px solid #007cba; border-radius: 4px;">
+                        <strong><?php esc_html_e('How to set up your merchant wallet:', 'real8-gateway'); ?></strong>
+                        <ol style="margin: 10px 0 0 20px;">
+                            <li><?php esc_html_e('Create a Stellar wallet (use Lobstr, Solar, or any Stellar wallet)', 'real8-gateway'); ?></li>
+                            <li><?php esc_html_e('Fund it with at least 1.5 XLM (for account reserve)', 'real8-gateway'); ?></li>
+                            <li><?php esc_html_e('Add REAL8 trustline:', 'real8-gateway'); ?>
+                                <br><code style="font-size: 11px;">Asset: REAL8 | Issuer: <?php echo esc_html(REAL8_GW_ASSET_ISSUER); ?></code>
+                            </li>
+                            <li><?php esc_html_e('Paste your public key (starts with G) above', 'real8-gateway'); ?></li>
+                        </ol>
+                    </div>
+                </fieldset>
+            </td>
+        </tr>
+        <?php
+
+        return ob_get_clean();
+    }
+
+    /**
+     * Check wallet status on Stellar network
+     */
+    private function check_wallet_status($address) {
+        $status = array(
+            'exists' => false,
+            'funded' => false,
+            'has_trustline' => false,
+            'xlm_balance' => 0,
+            'real8_balance' => 0,
+            'error' => null,
+        );
+
+        if (empty($address)) {
+            $status['error'] = 'no_address';
+            return $status;
+        }
+
+        if (!$this->stellar_api->validate_stellar_address($address)) {
+            $status['error'] = 'invalid_format';
+            return $status;
+        }
+
+        // Fetch account from Horizon
+        $url = REAL8_GW_HORIZON_URL . '/accounts/' . $address;
+        $response = wp_remote_get($url, array('timeout' => 10));
+
+        if (is_wp_error($response)) {
+            $status['error'] = 'network_error';
+            return $status;
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+
+        if ($code === 404) {
+            $status['error'] = 'not_found';
+            return $status;
+        }
+
+        if ($code !== 200) {
+            $status['error'] = 'api_error';
+            return $status;
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+
+        if (!$data || !isset($data['balances'])) {
+            $status['error'] = 'invalid_response';
+            return $status;
+        }
+
+        $status['exists'] = true;
+        $status['funded'] = true;
+
+        // Check balances
+        foreach ($data['balances'] as $balance) {
+            if ($balance['asset_type'] === 'native') {
+                $status['xlm_balance'] = (float) $balance['balance'];
+            } elseif (
+                isset($balance['asset_code']) &&
+                $balance['asset_code'] === REAL8_GW_ASSET_CODE &&
+                isset($balance['asset_issuer']) &&
+                $balance['asset_issuer'] === REAL8_GW_ASSET_ISSUER
+            ) {
+                $status['has_trustline'] = true;
+                $status['real8_balance'] = (float) $balance['balance'];
+            }
+        }
+
+        return $status;
+    }
+
+    /**
+     * Render wallet status HTML
+     */
+    private function render_wallet_status($status) {
+        if ($status['error'] === 'no_address') {
+            return '<div class="real8-status-box real8-status-warning">
+                <span class="dashicons dashicons-warning"></span>
+                <span>' . esc_html__('No wallet address configured. Enter your Stellar public key above.', 'real8-gateway') . '</span>
+            </div>';
+        }
+
+        if ($status['error'] === 'invalid_format') {
+            return '<div class="real8-status-box real8-status-error">
+                <span class="dashicons dashicons-no"></span>
+                <span>' . esc_html__('Invalid address format. Stellar addresses are 56 characters starting with G.', 'real8-gateway') . '</span>
+            </div>';
+        }
+
+        if ($status['error'] === 'not_found') {
+            return '<div class="real8-status-box real8-status-error">
+                <span class="dashicons dashicons-no"></span>
+                <span>' . esc_html__('Wallet not found on Stellar network. Make sure the account exists and is funded with at least 1 XLM.', 'real8-gateway') . '</span>
+            </div>';
+        }
+
+        if ($status['error'] === 'network_error' || $status['error'] === 'api_error') {
+            return '<div class="real8-status-box real8-status-warning">
+                <span class="dashicons dashicons-warning"></span>
+                <span>' . esc_html__('Could not verify wallet. Network error - please try again.', 'real8-gateway') . '</span>
+            </div>';
+        }
+
+        // Account exists - show detailed status
+        $html = '<div class="real8-status-checks">';
+
+        // Account exists check
+        $html .= '<div class="real8-check real8-check-success">
+            <span class="dashicons dashicons-yes-alt"></span>
+            <span>' . esc_html__('Account exists on Stellar', 'real8-gateway') . '</span>
+        </div>';
+
+        // XLM balance check
+        if ($status['xlm_balance'] >= 1.5) {
+            $html .= '<div class="real8-check real8-check-success">
+                <span class="dashicons dashicons-yes-alt"></span>
+                <span>' . sprintf(esc_html__('Funded with %s XLM', 'real8-gateway'), number_format($status['xlm_balance'], 2)) . '</span>
+            </div>';
+        } else {
+            $html .= '<div class="real8-check real8-check-warning">
+                <span class="dashicons dashicons-warning"></span>
+                <span>' . sprintf(esc_html__('Low XLM balance: %s (recommend 1.5+ XLM)', 'real8-gateway'), number_format($status['xlm_balance'], 2)) . '</span>
+            </div>';
+        }
+
+        // REAL8 trustline check
+        if ($status['has_trustline']) {
+            $html .= '<div class="real8-check real8-check-success">
+                <span class="dashicons dashicons-yes-alt"></span>
+                <span>' . sprintf(esc_html__('REAL8 trustline active (Balance: %s REAL8)', 'real8-gateway'), number_format($status['real8_balance'], 2)) . '</span>
+            </div>';
+        } else {
+            $html .= '<div class="real8-check real8-check-error">
+                <span class="dashicons dashicons-no"></span>
+                <span>' . esc_html__('REAL8 trustline missing - you cannot receive REAL8 payments!', 'real8-gateway') . '</span>
+            </div>';
+        }
+
+        $html .= '</div>';
+
+        // Overall status
+        if ($status['has_trustline'] && $status['xlm_balance'] >= 1.5) {
+            $html .= '<div class="real8-status-box real8-status-success" style="margin-top: 10px;">
+                <span class="dashicons dashicons-yes-alt"></span>
+                <span><strong>' . esc_html__('Ready to receive REAL8 payments!', 'real8-gateway') . '</strong></span>
+            </div>';
+        } elseif (!$status['has_trustline']) {
+            $html .= '<div class="real8-status-box real8-status-error" style="margin-top: 10px;">
+                <span class="dashicons dashicons-warning"></span>
+                <span><strong>' . esc_html__('Action required: Add REAL8 trustline to receive payments', 'real8-gateway') . '</strong></span>
+            </div>';
+        }
+
+        return $html;
     }
 }

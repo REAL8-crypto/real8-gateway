@@ -5,6 +5,23 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2025-12-29
+
+### Added
+- **Wallet validation in admin panel** - Real-time status display showing:
+  - Account existence on Stellar network
+  - XLM funding status with balance display
+  - REAL8 trustline status with balance display
+  - Clear warnings for unfunded or misconfigured wallets
+- **Setup instructions** - Step-by-step guide in admin panel for creating merchant wallet
+- **Admin styles** - Professional styling for wallet status indicators
+- **README badges** - Version, license, PHP, WordPress, WooCommerce, and Stellar badges
+
+### Changed
+- Enhanced merchant address field with custom HTML rendering
+- Improved error messages for wallet configuration issues
+- Updated documentation with merchant wallet setup section
+
 ## [1.0.0] - 2025-12-29
 
 ### Added
@@ -21,10 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AJAX payment status checking (every 15 seconds)
 - Email payment instructions in order confirmation
 - Admin settings page under WooCommerce > Settings > Payments
-- Merchant address validation (format and trustline check)
+- Merchant address validation (format check)
 - Order notes with transaction details on payment confirmation
 - Support for WooCommerce HPOS (High-Performance Order Storage)
 - Internationalization ready (text domain: real8-gateway)
+- GitHub Actions auto-deployment workflow
 
 ### Technical Details
 - Database table: `{prefix}real8_payments` for payment tracking
