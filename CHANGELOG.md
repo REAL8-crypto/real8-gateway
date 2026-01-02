@@ -5,6 +5,23 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-01-02
+
+### Changed
+- **Updated merchant wallet setup instructions** - Simplified setup flow pointing users to app.real8.org
+  - Removed multi-step wallet creation instructions
+  - Added direct link to REAL8/Stellar Wallet creation at https://app.real8.org/
+  - Added prominent warning about Secret Key backup
+- **Improved Spanish translations** - Using formal "usted" form throughout
+  - "Pago con REAL8" instead of "Pagar con REAL8" for title
+  - "Pague con REAL8" instead of "Paga con tokens REAL8" for description
+  - "Su Clave Pública Stellar" instead of "Dirección Stellar del comerciante"
+- **Field label change** - "Merchant Stellar Address" → "Your Stellar Public Key"
+- **Description update** - "Pay with REAL8 through the Stellar network. Fast, secure, and with very low fees."
+- **Trustline error message** - Now includes helpful link to app.real8.org for creating trustlines
+
+---
+
 ## [2.0.0] - 2025-12-29
 
 ### Added

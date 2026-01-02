@@ -78,18 +78,18 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
                 'title' => __('Title', 'real8-gateway'),
                 'type' => 'text',
                 'description' => __('Payment method title displayed to customers', 'real8-gateway'),
-                'default' => __('Pay with REAL8', 'real8-gateway'),
+                'default' => __('Payment with REAL8', 'real8-gateway'),
                 'desc_tip' => true,
             ),
             'description' => array(
                 'title' => __('Description', 'real8-gateway'),
                 'type' => 'textarea',
                 'description' => __('Payment method description displayed during checkout', 'real8-gateway'),
-                'default' => __('Pay with REAL8 tokens on the Stellar blockchain. Fast, secure, and low fees.', 'real8-gateway'),
+                'default' => __('Pay with REAL8 through the Stellar network. Fast, secure, and with very low fees.', 'real8-gateway'),
                 'desc_tip' => true,
             ),
             'merchant_address' => array(
-                'title' => __('Merchant Stellar Address', 'real8-gateway'),
+                'title' => __('Your Stellar Public Key', 'real8-gateway'),
                 'type' => 'merchant_address',
                 'description' => __('Your Stellar public key (starts with G) where REAL8 payments will be received. Each merchant needs their own Stellar wallet with REAL8 trustline.', 'real8-gateway'),
                 'default' => '',
@@ -144,7 +144,7 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
 
         // Check trustline
         if (!$this->stellar_api->check_real8_trustline($value)) {
-            WC_Admin_Settings::add_error(__('This Stellar address does not have a REAL8 trustline. Please add the trustline first.', 'real8-gateway'));
+            WC_Admin_Settings::add_error(__('This Stellar address does not have a REAL8 trustline. Please add one first. You can use the REAL8/Stellar Wallet at <a href="https://app.real8.org/" target="_blank">https://app.real8.org/</a> to create a REAL8 trustline.', 'real8-gateway'));
             return $this->get_option($key);
         }
 
@@ -474,15 +474,21 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
                     </p>
 
                     <div class="real8-wallet-help" style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-left: 4px solid #007cba; border-radius: 4px;">
-                        <strong><?php esc_html_e('How to set up your merchant wallet:', 'real8-gateway'); ?></strong>
-                        <ol style="margin: 10px 0 0 20px;">
-                            <li><?php esc_html_e('Create a Stellar wallet (use Lobstr, Solar, or any Stellar wallet)', 'real8-gateway'); ?></li>
-                            <li><?php esc_html_e('Fund it with at least 1.5 XLM (for account reserve)', 'real8-gateway'); ?></li>
-                            <li><?php esc_html_e('Add REAL8 trustline:', 'real8-gateway'); ?>
-                                <br><code style="font-size: 11px;">Asset: REAL8 | Issuer: <?php echo esc_html(REAL8_GW_ASSET_ISSUER); ?></code>
-                            </li>
-                            <li><?php esc_html_e('Paste your public key (starts with G) above', 'real8-gateway'); ?></li>
-                        </ol>
+                        <p style="margin: 0 0 10px 0;">
+                            <?php
+                            printf(
+                                /* translators: %s: URL to wallet app */
+                                esc_html__('If you don\'t have one, you can create a REAL8/Stellar Wallet at %s', 'real8-gateway'),
+                                '<a href="https://app.real8.org/" target="_blank">https://app.real8.org/</a>'
+                            );
+                            ?>
+                        </p>
+                        <p style="margin: 0 0 10px 0;">
+                            <?php esc_html_e('Once you have your Wallet, you can paste your public key (starts with G) above.', 'real8-gateway'); ?>
+                        </p>
+                        <p style="margin: 0; color: #d63638; font-weight: bold;">
+                            <?php esc_html_e('VERY IMPORTANT: If this is your first time creating a REAL8/Stellar account, remember to keep your Secret Key (it starts with S) in a safe place. If you lose it, you will not be able to recover your funds.', 'real8-gateway'); ?>
+                        </p>
                     </div>
                 </fieldset>
             </td>
