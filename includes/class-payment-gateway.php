@@ -824,14 +824,17 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
         // Account exists check
         $html .= '<div class="stellar-check stellar-check-success">
             <span class="dashicons dashicons-yes-alt"></span>
-            <span>' . esc_html__('Account exists on Stellar', 'real8-gateway') . '</span>
+            <span>' . esc_html__('Account exists on Stellar/REAL8', 'real8-gateway') . '</span>
         </div>';
 
-        // XLM balance check
+        // Get REAL8 balance
+        $real8_balance = isset($status['token_trustlines']['REAL8']['balance']) ? $status['token_trustlines']['REAL8']['balance'] : 0;
+
+        // XLM and REAL8 balance check
         if ($status['xlm_balance'] >= 1.5) {
             $html .= '<div class="stellar-check stellar-check-success">
                 <span class="dashicons dashicons-yes-alt"></span>
-                <span>' . sprintf(esc_html__('Funded with %s XLM', 'real8-gateway'), number_format($status['xlm_balance'], 2)) . '</span>
+                <span>' . sprintf(esc_html__('Funded with %s XLM and %s REAL8', 'real8-gateway'), number_format($status['xlm_balance'], 2), number_format($real8_balance, 2)) . '</span>
             </div>';
         } else {
             $html .= '<div class="stellar-check stellar-check-warning">

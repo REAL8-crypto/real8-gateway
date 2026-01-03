@@ -186,13 +186,13 @@ msgid "Could not verify wallet. Network error - please try again."
 msgstr "No se pudo verificar la billetera. Error de red - por favor, inténtalo de nuevo."
 
 #: includes/class-payment-gateway.php:606
-msgid "Account exists on Stellar"
-msgstr "La cuenta existe en Stellar"
+msgid "Account exists on Stellar/REAL8"
+msgstr "La cuenta existe en Stellar/REAL8"
 
 #: includes/class-payment-gateway.php:613
 #. translators: %s: XLM balance amount
-msgid "Funded with %s XLM"
-msgstr "Activada con %s XLM"
+msgid "Funded with %s XLM and %s REAL8"
+msgstr "Activada con %s XLM y %s REAL8"
 
 #: includes/class-payment-gateway.php:618
 #. translators: %s: XLM balance amount
