@@ -2,9 +2,12 @@
 /**
  * Stellar Payment API
  *
- * Handles REAL8 price fetching and Stellar payment verification
+ * Handles multi-token price fetching and Stellar payment verification.
+ * Uses dual-source pricing: api.real8.org for REAL8/XLM/USDC,
+ * Stellar Horizon orderbook for EURC/SLVR/GOLD/wREAL8.
  *
  * @package REAL8_Gateway
+ * @version 3.0.0
  */
 
 if (!defined('ABSPATH')) {
@@ -13,7 +16,11 @@ if (!defined('ABSPATH')) {
 
 class REAL8_Stellar_Payment_API {
     private static $instance = null;
-    private $price_cache_key = 'real8_gateway_price_cache';
+
+    /**
+     * Cache duration for prices (5 minutes)
+     */
+    const PRICE_CACHE_DURATION = 300;
 
     public static function get_instance() {
         if (null === self::$instance) {
@@ -27,45 +34,83 @@ class REAL8_Stellar_Payment_API {
     }
 
     /**
-     * Get current REAL8 price in USD
+     * Get current price for any supported token in USD
      *
-     * @param bool $force_refresh Force refresh from API
+     * @param string $token_code Token code (e.g., 'REAL8', 'XLM', 'EURC')
+     * @param bool $force_refresh Force refresh from API/Horizon
      * @return float|WP_Error Price in USD or error
      */
-    public function get_real8_price($force_refresh = false) {
+    public function get_token_price($token_code, $force_refresh = false) {
+        $token_code = strtoupper($token_code);
+        $cache_key = 'stellar_gw_price_' . $token_code;
+
         // Check cache first
         if (!$force_refresh) {
-            $cached = get_transient($this->price_cache_key);
+            $cached = get_transient($cache_key);
             if ($cached !== false) {
                 return (float) $cached;
             }
         }
 
-        // Fetch from API
-        $price = $this->fetch_price_from_api();
+        // Fetch price based on token source
+        if (REAL8_Token_Registry::is_api_priced($token_code)) {
+            $price = $this->fetch_price_from_api($token_code);
+        } else {
+            $price = $this->fetch_price_from_horizon($token_code);
+        }
 
         if (is_wp_error($price)) {
             // Try to return last known good price
-            $last_price = get_option('real8_gateway_last_known_price');
+            $last_price = get_option('stellar_gw_last_price_' . $token_code);
             if ($last_price) {
                 return (float) $last_price;
             }
+
+            // Try fallback price
+            $fallback_prices = REAL8_Token_Registry::get_fallback_prices();
+            if (isset($fallback_prices[$token_code])) {
+                return (float) $fallback_prices[$token_code];
+            }
+
             return $price; // Return the error
         }
 
         // Cache the price
-        set_transient($this->price_cache_key, $price, REAL8_GW_PRICE_CACHE_SECONDS);
-        update_option('real8_gateway_last_known_price', $price);
+        set_transient($cache_key, $price, self::PRICE_CACHE_DURATION);
+        update_option('stellar_gw_last_price_' . $token_code, $price);
 
         return $price;
     }
 
     /**
-     * Fetch price from api.real8.org
+     * Get prices for all enabled tokens
      *
+     * @param array $token_codes Array of token codes
+     * @param bool $force_refresh Force refresh
+     * @return array Token code => price array
+     */
+    public function get_all_token_prices($token_codes = null, $force_refresh = false) {
+        if ($token_codes === null) {
+            $token_codes = REAL8_Token_Registry::get_all_token_codes();
+        }
+
+        $prices = array();
+        foreach ($token_codes as $code) {
+            $price = $this->get_token_price($code, $force_refresh);
+            $prices[$code] = is_wp_error($price) ? null : $price;
+        }
+
+        return $prices;
+    }
+
+    /**
+     * Fetch price from api.real8.org
+     * Used for: REAL8, XLM, USDC
+     *
+     * @param string $token_code Token code
      * @return float|WP_Error
      */
-    private function fetch_price_from_api() {
+    private function fetch_price_from_api($token_code) {
         $response = wp_remote_get(REAL8_GW_PRICING_API, array(
             'timeout' => 10,
             'headers' => array(
@@ -85,28 +130,129 @@ class REAL8_Stellar_Payment_API {
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body, true);
 
-        if (!$data || !isset($data['REAL8_USDC']['priceInUSD'])) {
+        if (!$data) {
             return new WP_Error('api_error', 'Invalid response from pricing API');
         }
 
-        $price = (float) $data['REAL8_USDC']['priceInUSD'];
+        // Parse response based on token
+        switch ($token_code) {
+            case 'REAL8':
+                if (isset($data['REAL8_USDC']['priceInUSD'])) {
+                    return (float) $data['REAL8_USDC']['priceInUSD'];
+                }
+                if (isset($data['REAL8']['priceInUSD'])) {
+                    return (float) $data['REAL8']['priceInUSD'];
+                }
+                break;
 
-        if ($price <= 0) {
-            return new WP_Error('api_error', 'Invalid price from API: ' . $price);
+            case 'XLM':
+                if (isset($data['XLM']['priceInUSD'])) {
+                    return (float) $data['XLM']['priceInUSD'];
+                }
+                // XLM might need to be calculated from USDC rate
+                break;
+
+            case 'USDC':
+                // USDC is pegged to $1
+                return 1.0;
         }
 
-        return $price;
+        return new WP_Error('api_error', 'Price not found for ' . $token_code);
     }
 
     /**
-     * Calculate REAL8 amount for given USD amount
+     * Fetch price from Stellar Horizon orderbook
+     * Used for: EURC, SLVR, GOLD, wREAL8
+     *
+     * Uses triangular pricing: TOKEN/XLM × XLM/USD = TOKEN/USD
+     *
+     * @param string $token_code Token code
+     * @return float|WP_Error
+     */
+    private function fetch_price_from_horizon($token_code) {
+        // First get XLM/USD price
+        $xlm_usd = $this->get_token_price('XLM');
+        if (is_wp_error($xlm_usd)) {
+            // Use fallback XLM price
+            $xlm_usd = 0.45;
+        }
+
+        // Get TOKEN/XLM price from orderbook
+        $token_xlm = $this->fetch_orderbook_price($token_code, 'XLM');
+
+        if (is_wp_error($token_xlm)) {
+            return $token_xlm;
+        }
+
+        // Calculate USD price: TOKEN_USD = TOKEN_XLM × XLM_USD
+        $token_usd = $token_xlm * $xlm_usd;
+
+        return $token_usd;
+    }
+
+    /**
+     * Fetch mid-price from Stellar Horizon orderbook
+     *
+     * @param string $selling_token Token being sold
+     * @param string $buying_token Token being bought (usually XLM)
+     * @return float|WP_Error Mid-price or error
+     */
+    private function fetch_orderbook_price($selling_token, $buying_token) {
+        // Build query parameters
+        $params = array_merge(
+            REAL8_Token_Registry::get_horizon_params($selling_token, 'selling'),
+            REAL8_Token_Registry::get_horizon_params($buying_token, 'buying'),
+            array('limit' => 1)
+        );
+
+        $url = REAL8_GW_HORIZON_URL . '/order_book?' . http_build_query($params);
+
+        $response = wp_remote_get($url, array(
+            'timeout' => 10,
+            'headers' => array(
+                'Accept' => 'application/json',
+            ),
+        ));
+
+        if (is_wp_error($response)) {
+            return new WP_Error('horizon_error', 'Failed to fetch orderbook: ' . $response->get_error_message());
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        if ($code !== 200) {
+            return new WP_Error('horizon_error', 'Horizon API returned status ' . $code);
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+
+        // Calculate mid-price from best bid and ask
+        $ask_price = isset($data['asks'][0]['price']) ? (float) $data['asks'][0]['price'] : 0;
+        $bid_price = isset($data['bids'][0]['price']) ? (float) $data['bids'][0]['price'] : 0;
+
+        if ($ask_price <= 0 && $bid_price <= 0) {
+            return new WP_Error('no_liquidity', 'No orderbook liquidity for ' . $selling_token . '/' . $buying_token);
+        }
+
+        // Use mid-price if both available, otherwise use whichever is available
+        if ($ask_price > 0 && $bid_price > 0) {
+            return ($ask_price + $bid_price) / 2;
+        }
+
+        return $ask_price > 0 ? $ask_price : $bid_price;
+    }
+
+    /**
+     * Calculate token amount for given USD amount
      *
      * @param float $usd_amount Amount in USD
+     * @param string $token_code Token code
      * @param bool $include_buffer Include price buffer for volatility
      * @return array|WP_Error Array with amount and price details or error
      */
-    public function calculate_real8_amount($usd_amount, $include_buffer = true) {
-        $price = $this->get_real8_price();
+    public function calculate_token_amount($usd_amount, $token_code, $include_buffer = true) {
+        $token_code = strtoupper($token_code);
+        $price = $this->get_token_price($token_code);
 
         if (is_wp_error($price)) {
             return $price;
@@ -116,14 +262,44 @@ class REAL8_Stellar_Payment_API {
         $buffer_multiplier = $include_buffer ? (1 - (REAL8_GW_PRICE_BUFFER_PERCENT / 100)) : 1;
         $effective_price = $price * $buffer_multiplier;
 
-        $real8_amount = $usd_amount / $effective_price;
+        $token_amount = $usd_amount / $effective_price;
 
         return array(
-            'real8_amount' => round($real8_amount, 7), // Stellar supports 7 decimals
+            'token_amount' => round($token_amount, 7), // Stellar supports 7 decimals
+            'token_code' => $token_code,
             'usd_amount' => $usd_amount,
-            'price_per_real8' => $price,
+            'price_per_token' => $price,
             'effective_price' => $effective_price,
             'buffer_percent' => REAL8_GW_PRICE_BUFFER_PERCENT,
+        );
+    }
+
+    /**
+     * Legacy method for backward compatibility
+     * @deprecated 3.0.0 Use get_token_price('REAL8') instead
+     */
+    public function get_real8_price($force_refresh = false) {
+        return $this->get_token_price('REAL8', $force_refresh);
+    }
+
+    /**
+     * Legacy method for backward compatibility
+     * @deprecated 3.0.0 Use calculate_token_amount() instead
+     */
+    public function calculate_real8_amount($usd_amount, $include_buffer = true) {
+        $result = $this->calculate_token_amount($usd_amount, 'REAL8', $include_buffer);
+
+        if (is_wp_error($result)) {
+            return $result;
+        }
+
+        // Map to old format for backward compatibility
+        return array(
+            'real8_amount' => $result['token_amount'],
+            'usd_amount' => $result['usd_amount'],
+            'price_per_real8' => $result['price_per_token'],
+            'effective_price' => $result['effective_price'],
+            'buffer_percent' => $result['buffer_percent'],
         );
     }
 
@@ -134,10 +310,10 @@ class REAL8_Stellar_Payment_API {
      * @return string Unique memo (max 28 chars for Stellar text memo)
      */
     public function generate_payment_memo($order_id) {
-        // Format: R8-{order_id}-{random}
+        // Format: S-{order_id}-{random} (S for Stellar, generic)
         // Keep it short for Stellar text memo limit (28 chars)
         $random = substr(md5(uniqid(mt_rand(), true)), 0, 6);
-        return 'R8-' . $order_id . '-' . $random;
+        return 'S-' . $order_id . '-' . $random;
     }
 
     /**
@@ -145,11 +321,13 @@ class REAL8_Stellar_Payment_API {
      *
      * @param string $merchant_address The merchant's Stellar address
      * @param string $memo The payment memo to look for
-     * @param float $expected_amount Expected REAL8 amount
+     * @param float $expected_amount Expected token amount
+     * @param string $asset_code Asset code to look for
+     * @param string|null $asset_issuer Asset issuer (null for XLM)
      * @param string $since_cursor Cursor for pagination (optional)
      * @return array|false Payment details or false if not found
      */
-    public function check_payment($merchant_address, $memo, $expected_amount, $since_cursor = null) {
+    public function check_payment($merchant_address, $memo, $expected_amount, $asset_code = 'REAL8', $asset_issuer = null, $since_cursor = null) {
         // Query Stellar Horizon for payments to this address
         $url = REAL8_GW_HORIZON_URL . '/accounts/' . $merchant_address . '/payments';
         $params = array(
@@ -171,13 +349,13 @@ class REAL8_Stellar_Payment_API {
         ));
 
         if (is_wp_error($response)) {
-            error_log('REAL8 Gateway: Failed to check payments: ' . $response->get_error_message());
+            error_log('Stellar Gateway: Failed to check payments: ' . $response->get_error_message());
             return false;
         }
 
         $code = wp_remote_retrieve_response_code($response);
         if ($code !== 200) {
-            error_log('REAL8 Gateway: Horizon API returned status ' . $code);
+            error_log('Stellar Gateway: Horizon API returned status ' . $code);
             return false;
         }
 
@@ -188,6 +366,9 @@ class REAL8_Stellar_Payment_API {
             return false;
         }
 
+        // Determine if we're looking for native XLM or a credit asset
+        $is_native = REAL8_Token_Registry::is_native($asset_code);
+
         // Look through payments for matching memo and amount
         foreach ($data['_embedded']['records'] as $payment) {
             // Only process payment operations
@@ -195,13 +376,21 @@ class REAL8_Stellar_Payment_API {
                 continue;
             }
 
-            // Check if it's REAL8 token
-            if (!isset($payment['asset_code']) || $payment['asset_code'] !== REAL8_GW_ASSET_CODE) {
-                continue;
-            }
+            // Check asset type matches
+            if ($is_native) {
+                // Looking for XLM (native)
+                if ($payment['asset_type'] !== 'native') {
+                    continue;
+                }
+            } else {
+                // Looking for a credit asset
+                if (!isset($payment['asset_code']) || $payment['asset_code'] !== $asset_code) {
+                    continue;
+                }
 
-            if (!isset($payment['asset_issuer']) || $payment['asset_issuer'] !== REAL8_GW_ASSET_ISSUER) {
-                continue;
+                if (!isset($payment['asset_issuer']) || $payment['asset_issuer'] !== $asset_issuer) {
+                    continue;
+                }
             }
 
             // Get transaction details to check memo
@@ -229,6 +418,8 @@ class REAL8_Stellar_Payment_API {
                     'from' => $payment['from'],
                     'created_at' => $payment['created_at'],
                     'paging_token' => $payment['paging_token'],
+                    'asset_code' => $is_native ? 'XLM' : $payment['asset_code'],
+                    'asset_issuer' => $is_native ? null : $payment['asset_issuer'],
                 );
             }
         }
@@ -295,12 +486,23 @@ class REAL8_Stellar_Payment_API {
     }
 
     /**
-     * Check if merchant address has REAL8 trustline
+     * Check if address has trustline for a specific token
      *
      * @param string $address Stellar address
-     * @return bool True if trustline exists
+     * @param string $token_code Token code
+     * @return bool True if trustline exists (or native XLM)
      */
-    public function check_real8_trustline($address) {
+    public function check_token_trustline($address, $token_code) {
+        // XLM doesn't need a trustline
+        if (REAL8_Token_Registry::is_native($token_code)) {
+            return true;
+        }
+
+        $token = REAL8_Token_Registry::get_token($token_code);
+        if (!$token) {
+            return false;
+        }
+
         $url = REAL8_GW_HORIZON_URL . '/accounts/' . $address;
 
         $response = wp_remote_get($url, array(
@@ -325,9 +527,9 @@ class REAL8_Stellar_Payment_API {
 
         foreach ($data['balances'] as $balance) {
             if (isset($balance['asset_code']) &&
-                $balance['asset_code'] === REAL8_GW_ASSET_CODE &&
+                $balance['asset_code'] === $token['code'] &&
                 isset($balance['asset_issuer']) &&
-                $balance['asset_issuer'] === REAL8_GW_ASSET_ISSUER) {
+                $balance['asset_issuer'] === $token['issuer']) {
                 return true;
             }
         }
@@ -336,9 +538,86 @@ class REAL8_Stellar_Payment_API {
     }
 
     /**
-     * Clear price cache
+     * Check trustlines for multiple tokens
+     *
+     * @param string $address Stellar address
+     * @param array $token_codes Array of token codes
+     * @return array Token code => bool (has trustline)
      */
-    public function clear_price_cache() {
-        delete_transient($this->price_cache_key);
+    public function check_multiple_trustlines($address, $token_codes) {
+        $url = REAL8_GW_HORIZON_URL . '/accounts/' . $address;
+
+        $response = wp_remote_get($url, array(
+            'timeout' => 10,
+        ));
+
+        if (is_wp_error($response)) {
+            // Return all false on error
+            return array_fill_keys($token_codes, false);
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        if ($code !== 200) {
+            return array_fill_keys($token_codes, false);
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+
+        $results = array();
+
+        foreach ($token_codes as $token_code) {
+            // XLM doesn't need a trustline
+            if (REAL8_Token_Registry::is_native($token_code)) {
+                $results[$token_code] = true;
+                continue;
+            }
+
+            $token = REAL8_Token_Registry::get_token($token_code);
+            if (!$token) {
+                $results[$token_code] = false;
+                continue;
+            }
+
+            $has_trustline = false;
+            if (isset($data['balances'])) {
+                foreach ($data['balances'] as $balance) {
+                    if (isset($balance['asset_code']) &&
+                        $balance['asset_code'] === $token['code'] &&
+                        isset($balance['asset_issuer']) &&
+                        $balance['asset_issuer'] === $token['issuer']) {
+                        $has_trustline = true;
+                        break;
+                    }
+                }
+            }
+
+            $results[$token_code] = $has_trustline;
+        }
+
+        return $results;
+    }
+
+    /**
+     * Legacy method for backward compatibility
+     * @deprecated 3.0.0 Use check_token_trustline() instead
+     */
+    public function check_real8_trustline($address) {
+        return $this->check_token_trustline($address, 'REAL8');
+    }
+
+    /**
+     * Clear price cache for a specific token or all tokens
+     *
+     * @param string|null $token_code Token code or null for all
+     */
+    public function clear_price_cache($token_code = null) {
+        if ($token_code) {
+            delete_transient('stellar_gw_price_' . strtoupper($token_code));
+        } else {
+            foreach (REAL8_Token_Registry::get_all_token_codes() as $code) {
+                delete_transient('stellar_gw_price_' . $code);
+            }
+        }
     }
 }

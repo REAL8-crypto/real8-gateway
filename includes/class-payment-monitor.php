@@ -2,9 +2,11 @@
 /**
  * Payment Monitor
  *
- * Handles automatic checking of pending REAL8 payments via cron
+ * Handles automatic checking of pending Stellar payments via cron
+ * Supports all tokens: XLM, REAL8, wREAL8, USDC, EURC, SLVR, GOLD
  *
  * @package REAL8_Gateway
+ * @version 3.0.0
  */
 
 if (!defined('ABSPATH')) {
@@ -80,15 +82,24 @@ class REAL8_Payment_Monitor {
             return;
         }
 
+        // Get asset code and issuer from payment record
+        $asset_code = isset($payment->asset_code) ? $payment->asset_code : 'REAL8';
+        $asset_issuer = isset($payment->asset_issuer) ? $payment->asset_issuer : REAL8_GW_ASSET_ISSUER;
+
+        // Get expected amount (column renamed from amount_real8 to amount_token in v3.0)
+        $expected_amount = isset($payment->amount_token) ? (float) $payment->amount_token : (float) $payment->amount_real8;
+
         // Check for payment on Stellar
         $result = $this->stellar_api->check_payment(
             $merchant_address,
             $payment->memo,
-            (float) $payment->amount_real8
+            $expected_amount,
+            $asset_code,
+            $asset_issuer
         );
 
         if ($result) {
-            $this->mark_payment_confirmed($payment, $result);
+            $this->mark_payment_confirmed($payment, $result, $asset_code);
         }
     }
 
@@ -109,13 +120,23 @@ class REAL8_Payment_Monitor {
             array('%d')
         );
 
+        // Get asset code for message
+        $asset_code = isset($payment->asset_code) ? $payment->asset_code : 'REAL8';
+
         // Update order status
         $order = wc_get_order($payment->order_id);
         if ($order && $order->has_status('pending')) {
-            $order->update_status('failed', __('REAL8 payment expired - no payment received within the time limit.', 'real8-gateway'));
+            $order->update_status(
+                'failed',
+                sprintf(
+                    /* translators: %s: token code */
+                    __('%s payment expired - no payment received within the time limit.', 'real8-gateway'),
+                    $asset_code
+                )
+            );
         }
 
-        error_log(sprintf('REAL8 Gateway: Payment expired for order #%d', $payment->order_id));
+        error_log(sprintf('REAL8 Gateway: Payment expired for order #%d (%s)', $payment->order_id, $asset_code));
     }
 
     /**
@@ -123,8 +144,9 @@ class REAL8_Payment_Monitor {
      *
      * @param object $payment Payment record
      * @param array $result Payment result from Stellar
+     * @param string $asset_code Asset code for display
      */
-    private function mark_payment_confirmed($payment, $result) {
+    private function mark_payment_confirmed($payment, $result, $asset_code = 'REAL8') {
         global $wpdb;
         $table = $wpdb->prefix . 'real8_payments';
 
@@ -145,25 +167,28 @@ class REAL8_Payment_Monitor {
         if ($order) {
             // Add order note with transaction details
             $note = sprintf(
-                __('REAL8 payment confirmed! Amount: %s REAL8. TX: %s. From: %s', 'real8-gateway'),
+                /* translators: 1: amount, 2: token code, 3: tx hash, 4: sender address */
+                __('%1$s %2$s payment confirmed! TX: %3$s. From: %4$s', 'real8-gateway'),
                 number_format($result['amount'], 7),
+                $asset_code,
                 $result['tx_hash'],
                 $result['from']
             );
             $order->add_order_note($note);
 
             // Save transaction details
-            $order->update_meta_data('_real8_tx_hash', $result['tx_hash']);
-            $order->update_meta_data('_real8_paid_amount', $result['amount']);
-            $order->update_meta_data('_real8_from_address', $result['from']);
-            $order->update_meta_data('_real8_paid_at', $result['created_at']);
+            $order->update_meta_data('_stellar_tx_hash', $result['tx_hash']);
+            $order->update_meta_data('_stellar_paid_amount', $result['amount']);
+            $order->update_meta_data('_stellar_from_address', $result['from']);
+            $order->update_meta_data('_stellar_paid_at', $result['created_at']);
 
             // Mark as processing (or completed depending on settings)
             $order->payment_complete($result['tx_hash']);
             $order->save();
 
             error_log(sprintf(
-                'REAL8 Gateway: Payment confirmed for order #%d - TX: %s',
+                'REAL8 Gateway: %s payment confirmed for order #%d - TX: %s',
+                $asset_code,
                 $payment->order_id,
                 $result['tx_hash']
             ));
@@ -187,7 +212,7 @@ class REAL8_Payment_Monitor {
                 ?>
                 <div class="notice notice-warning">
                     <p>
-                        <strong><?php esc_html_e('REAL8 Gateway:', 'real8-gateway'); ?></strong>
+                        <strong><?php esc_html_e('Stellar Payment Gateway:', 'real8-gateway'); ?></strong>
                         <?php
                         printf(
                             esc_html__('Payment gateway is enabled but no merchant address is configured. %sGo to settings%s', 'real8-gateway'),
@@ -216,12 +241,12 @@ class REAL8_Payment_Monitor {
             ?>
             <div class="notice notice-info">
                 <p>
-                    <strong><?php esc_html_e('REAL8 Gateway:', 'real8-gateway'); ?></strong>
+                    <strong><?php esc_html_e('Stellar Payment Gateway:', 'real8-gateway'); ?></strong>
                     <?php
                     printf(
                         esc_html(_n(
-                            '%d pending REAL8 payment is about to expire.',
-                            '%d pending REAL8 payments are about to expire.',
+                            '%d pending Stellar payment is about to expire.',
+                            '%d pending Stellar payments are about to expire.',
                             $expiring_soon,
                             'real8-gateway'
                         )),
@@ -250,7 +275,7 @@ class REAL8_Payment_Monitor {
         ));
 
         if (!$payment) {
-            return new WP_Error('not_found', __('No REAL8 payment record found for this order', 'real8-gateway'));
+            return new WP_Error('not_found', __('No Stellar payment record found for this order', 'real8-gateway'));
         }
 
         if ($payment->status === 'confirmed') {
@@ -268,14 +293,21 @@ class REAL8_Payment_Monitor {
             return new WP_Error('no_address', __('Merchant address not configured', 'real8-gateway'));
         }
 
+        // Get asset details from payment record
+        $asset_code = isset($payment->asset_code) ? $payment->asset_code : 'REAL8';
+        $asset_issuer = isset($payment->asset_issuer) ? $payment->asset_issuer : REAL8_GW_ASSET_ISSUER;
+        $expected_amount = isset($payment->amount_token) ? (float) $payment->amount_token : (float) $payment->amount_real8;
+
         $result = $this->stellar_api->check_payment(
             $merchant_address,
             $payment->memo,
-            (float) $payment->amount_real8
+            $expected_amount,
+            $asset_code,
+            $asset_issuer
         );
 
         if ($result) {
-            $this->mark_payment_confirmed($payment, $result);
+            $this->mark_payment_confirmed($payment, $result, $asset_code);
             return true;
         }
 
@@ -308,10 +340,11 @@ class REAL8_Payment_Monitor {
             'pending' => 0,
             'confirmed' => 0,
             'expired' => 0,
-            'total_real8_received' => 0,
+            'by_token' => array(),
             'total_usd_received' => 0,
         );
 
+        // Overall counts
         $counts = $wpdb->get_results(
             "SELECT status, COUNT(*) as count FROM $table GROUP BY status"
         );
@@ -321,14 +354,26 @@ class REAL8_Payment_Monitor {
             $stats['total'] += (int) $row->count;
         }
 
-        $totals = $wpdb->get_row(
-            "SELECT SUM(amount_real8) as real8, SUM(amount_usd) as usd
-             FROM $table WHERE status = 'confirmed'"
+        // Per-token statistics
+        $token_stats = $wpdb->get_results(
+            "SELECT asset_code,
+                    COUNT(*) as total_count,
+                    SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as confirmed_count,
+                    SUM(CASE WHEN status = 'confirmed' THEN amount_token ELSE 0 END) as total_received,
+                    SUM(CASE WHEN status = 'confirmed' THEN amount_usd ELSE 0 END) as total_usd
+             FROM $table
+             GROUP BY asset_code"
         );
 
-        if ($totals) {
-            $stats['total_real8_received'] = (float) $totals->real8;
-            $stats['total_usd_received'] = (float) $totals->usd;
+        foreach ($token_stats as $row) {
+            $code = $row->asset_code ?: 'REAL8';
+            $stats['by_token'][$code] = array(
+                'total' => (int) $row->total_count,
+                'confirmed' => (int) $row->confirmed_count,
+                'amount_received' => (float) $row->total_received,
+                'usd_received' => (float) $row->total_usd,
+            );
+            $stats['total_usd_received'] += (float) $row->total_usd;
         }
 
         return $stats;

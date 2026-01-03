@@ -3,18 +3,26 @@
  * Payment Instructions Template
  *
  * Displayed on thank-you page after order placement
+ * Supports all Stellar tokens: XLM, REAL8, wREAL8, USDC, EURC, SLVR, GOLD
  *
  * @package REAL8_Gateway
+ * @version 3.0.0
  */
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-// Variables available: $order, $memo, $amount, $expires, $merchant, $status
+// Variables available: $order, $memo, $amount, $expires, $merchant, $status, $asset_code, $asset_issuer
 $expires_timestamp = strtotime($expires);
 $time_remaining = max(0, $expires_timestamp - time());
 $minutes_remaining = ceil($time_remaining / 60);
+
+// Get token display info from registry
+$token_info = REAL8_Token_Registry::get_token($asset_code);
+$token_name = $token_info ? $token_info['name'] : $asset_code;
+$token_color = $token_info ? $token_info['color'] : '#666666';
+$is_native = $token_info ? $token_info['is_native'] : false;
 ?>
 
 <div id="real8-payment-instructions" class="real8-payment-box" data-order-id="<?php echo esc_attr($order->get_id()); ?>" data-status="<?php echo esc_attr($status); ?>">
@@ -24,7 +32,15 @@ $minutes_remaining = ceil($time_remaining / 60);
         <div class="real8-payment-status real8-status-confirmed">
             <span class="real8-status-icon">&#10004;</span>
             <h3><?php esc_html_e('Payment Received!', 'real8-gateway'); ?></h3>
-            <p><?php esc_html_e('Your REAL8 payment has been confirmed. Thank you for your order!', 'real8-gateway'); ?></p>
+            <p>
+                <?php
+                printf(
+                    /* translators: %s: token code (e.g., REAL8, XLM, USDC) */
+                    esc_html__('Your %s payment has been confirmed. Thank you for your order!', 'real8-gateway'),
+                    esc_html($asset_code)
+                );
+                ?>
+            </p>
         </div>
 
     <?php elseif ($status === 'expired'): ?>
@@ -38,8 +54,16 @@ $minutes_remaining = ceil($time_remaining / 60);
     <?php else: ?>
         <!-- Awaiting Payment -->
         <div class="real8-payment-status real8-status-pending">
-            <span class="real8-status-icon real8-pulse">&#9679;</span>
-            <h3><?php esc_html_e('Awaiting REAL8 Payment', 'real8-gateway'); ?></h3>
+            <span class="real8-status-icon real8-pulse" style="color: <?php echo esc_attr($token_color); ?>;">&#9679;</span>
+            <h3>
+                <?php
+                printf(
+                    /* translators: %s: token code (e.g., REAL8, XLM, USDC) */
+                    esc_html__('Awaiting %s Payment', 'real8-gateway'),
+                    esc_html($asset_code)
+                );
+                ?>
+            </h3>
             <p class="real8-timer">
                 <?php
                 printf(
@@ -56,7 +80,9 @@ $minutes_remaining = ceil($time_remaining / 60);
             <div class="real8-detail-row">
                 <label><?php esc_html_e('Amount:', 'real8-gateway'); ?></label>
                 <div class="real8-value real8-amount">
-                    <strong><?php echo esc_html(number_format($amount, 7)); ?> REAL8</strong>
+                    <strong style="color: <?php echo esc_attr($token_color); ?>;">
+                        <?php echo esc_html(number_format($amount, 7)); ?> <?php echo esc_html($asset_code); ?>
+                    </strong>
                     <button type="button" class="real8-copy-btn" data-copy="<?php echo esc_attr(number_format($amount, 7)); ?>" title="<?php esc_attr_e('Copy amount', 'real8-gateway'); ?>">
                         <span class="dashicons dashicons-admin-page"></span>
                     </button>
@@ -89,11 +115,19 @@ $minutes_remaining = ceil($time_remaining / 60);
             </div>
 
             <div class="real8-asset-info">
-                <p>
-                    <strong><?php esc_html_e('REAL8 Token:', 'real8-gateway'); ?></strong><br>
-                    <?php esc_html_e('Asset Code:', 'real8-gateway'); ?> <code>REAL8</code><br>
-                    <?php esc_html_e('Issuer:', 'real8-gateway'); ?> <code class="real8-issuer"><?php echo esc_html(REAL8_GW_ASSET_ISSUER); ?></code>
-                </p>
+                <div class="real8-asset-header" style="border-left: 4px solid <?php echo esc_attr($token_color); ?>;">
+                    <strong><?php echo esc_html($token_name); ?> (<?php echo esc_html($asset_code); ?>)</strong>
+                </div>
+                <?php if ($is_native): ?>
+                    <p class="real8-native-asset">
+                        <?php esc_html_e('Native Stellar Asset', 'real8-gateway'); ?>
+                    </p>
+                <?php else: ?>
+                    <p>
+                        <?php esc_html_e('Asset Code:', 'real8-gateway'); ?> <code><?php echo esc_html($asset_code); ?></code><br>
+                        <?php esc_html_e('Issuer:', 'real8-gateway'); ?> <code class="real8-issuer"><?php echo esc_html($asset_issuer); ?></code>
+                    </p>
+                <?php endif; ?>
             </div>
         </div>
 
@@ -105,9 +139,11 @@ $minutes_remaining = ceil($time_remaining / 60);
             <p class="real8-order-total">
                 <?php
                 printf(
-                    esc_html__('Order Total: %s (approximately %s REAL8 at current rate)', 'real8-gateway'),
+                    /* translators: 1: order total, 2: token amount, 3: token code */
+                    esc_html__('Order Total: %1$s (approximately %2$s %3$s at current rate)', 'real8-gateway'),
                     wc_price($order->get_total()),
-                    number_format($amount, 2)
+                    number_format($amount, 2),
+                    esc_html($asset_code)
                 );
                 ?>
             </p>
@@ -155,7 +191,6 @@ $minutes_remaining = ceil($time_remaining / 60);
 }
 
 .real8-pulse {
-    color: #ffc107;
     animation: pulse 2s infinite;
 }
 
@@ -211,7 +246,6 @@ $minutes_remaining = ceil($time_remaining / 60);
 
 .real8-amount strong {
     font-size: 1.3em;
-    color: #28a745;
 }
 
 .real8-copy-btn {
@@ -256,6 +290,17 @@ $minutes_remaining = ceil($time_remaining / 60);
     border-radius: 4px;
     font-size: 0.85em;
     margin-top: 20px;
+}
+
+.real8-asset-header {
+    padding-left: 10px;
+    margin-bottom: 10px;
+}
+
+.real8-native-asset {
+    color: #666;
+    font-style: italic;
+    margin: 0;
 }
 
 .real8-asset-info code.real8-issuer {

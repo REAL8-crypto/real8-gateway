@@ -5,6 +5,31 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-01-03
+
+### Added
+- **Multi-token payment support** - Accept 7 Stellar tokens: XLM, REAL8, wREAL8, USDC, EURC, SLVR, GOLD
+- **Token Registry** - New `class-token-registry.php` with centralized token definitions
+- **Dual-source pricing** - Real-time prices from api.real8.org (REAL8, XLM, USDC) and Stellar Horizon orderbook (EURC, SLVR, GOLD, wREAL8)
+- **Token selector at checkout** - Customers choose their preferred payment token with live pricing
+- **Admin token multiselect** - Merchants enable/disable individual tokens
+- **Per-token wallet validation** - Admin panel shows trustline status for all 7 tokens
+- **Per-token statistics** - Payment stats broken down by token type
+
+### Changed
+- **Database schema** - Added `asset_code` and `asset_issuer` columns, renamed `amount_real8` to `amount_token`, renamed `real8_price` to `token_price`
+- **Payment instructions** - Dynamic display based on selected token (shows native XLM differently from credit assets)
+- **Payment monitor** - Now checks payments for any supported token with correct asset matching
+- **Order meta keys** - Changed from `_real8_*` to `_stellar_*` for generic token support
+
+### Technical Details
+- Triangular pricing for Horizon tokens: TOKEN/XLM × XLM/USD = TOKEN/USD
+- 5-minute cache per token using WordPress transients
+- Fallback prices for API failures
+- Backward compatible database migration (existing REAL8 orders preserved)
+
+---
+
 ## [2.1.0] - 2026-01-02
 
 ### Changed
@@ -90,18 +115,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Roadmap
 
-### [2.1.0] - Planned
+### [3.1.0] - Planned
 - QR code display for payment address
 - Admin dashboard with payment statistics
 - Manual payment check button in order admin
 
-### [2.2.0] - Planned
-- Support for additional currencies (EUR, GBP)
+### [3.2.0] - Planned
 - Webhook notifications for payment events
 - Partial payment handling
 - Additional translations (French, German, Portuguese)
 
-### [3.0.0] - Planned
+### [4.0.0] - Planned
 - Multi-chain support (BSC, Base, Optimism wREAL8)
 - Automatic refund processing
 - Integration with WooCommerce Subscriptions

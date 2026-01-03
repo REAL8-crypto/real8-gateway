@@ -2,8 +2,8 @@
 /**
  * Plugin Name: REAL8 Gateway for WooCommerce
  * Plugin URI: https://real8.org
- * Description: Accept REAL8 token payments on the Stellar network for WooCommerce orders
- * Version: 2.1.0
+ * Description: Accept Stellar token payments (XLM, REAL8, USDC, EURC, SLVR, GOLD) for WooCommerce orders
+ * Version: 3.0.0
  * Author: REAL8
  * Author URI: https://real8.org
  * License: GPL v2 or later
@@ -20,14 +20,21 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('REAL8_GATEWAY_VERSION', '2.1.0');
+define('REAL8_GATEWAY_VERSION', '3.0.0');
 define('REAL8_GATEWAY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('REAL8_GATEWAY_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('REAL8_GATEWAY_PLUGIN_FILE', __FILE__);
 
-// REAL8 Token Constants
+// Database version for schema migrations
+define('REAL8_GATEWAY_DB_VERSION', '3.0.0');
+
+// Legacy constants - kept for backward compatibility
+// @deprecated 3.0.0 Use REAL8_Token_Registry class instead
 define('REAL8_GW_ASSET_CODE', 'REAL8');
 define('REAL8_GW_ASSET_ISSUER', 'GBVYYQ7XXRZW6ZCNNCL2X2THNPQ6IM4O47HAA25JTAG7Z3CXJCQ3W4CD');
+
+// Load Token Registry early (needed for constants)
+require_once plugin_dir_path(__FILE__) . 'includes/class-token-registry.php';
 
 // Stellar Network
 define('REAL8_GW_HORIZON_URL', 'https://horizon.stellar.org');
@@ -130,6 +137,7 @@ class REAL8_Gateway {
 
     public function activate() {
         $this->create_tables();
+        $this->migrate_database();
         $this->set_default_options();
         $this->schedule_payment_checks();
         flush_rewrite_rules();
@@ -145,13 +153,16 @@ class REAL8_Gateway {
         $charset_collate = $wpdb->get_charset_collate();
         $table_name = $wpdb->prefix . 'real8_payments';
 
+        // Updated schema with multi-token support (v3.0.0)
         $sql = "CREATE TABLE IF NOT EXISTS $table_name (
             id bigint(20) NOT NULL AUTO_INCREMENT,
             order_id bigint(20) NOT NULL,
             memo varchar(64) NOT NULL,
-            amount_real8 decimal(20,7) NOT NULL,
+            asset_code varchar(12) NOT NULL DEFAULT 'REAL8',
+            asset_issuer varchar(56) DEFAULT NULL,
+            amount_token decimal(20,7) NOT NULL,
             amount_usd decimal(10,2) NOT NULL,
-            real8_price decimal(15,8) NOT NULL,
+            token_price decimal(15,8) NOT NULL,
             merchant_address varchar(56) NOT NULL,
             status varchar(20) DEFAULT 'pending',
             stellar_tx_hash varchar(64) DEFAULT NULL,
@@ -162,11 +173,63 @@ class REAL8_Gateway {
             UNIQUE KEY order_id (order_id),
             KEY memo (memo),
             KEY status (status),
-            KEY expires_at (expires_at)
+            KEY expires_at (expires_at),
+            KEY asset_code (asset_code)
         ) $charset_collate;";
 
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql);
+    }
+
+    /**
+     * Migrate database from v2.x to v3.0 (multi-token support)
+     */
+    private function migrate_database() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'real8_payments';
+
+        $installed_version = get_option('real8_gateway_db_version', '1.0.0');
+
+        // Skip if already migrated
+        if (version_compare($installed_version, '3.0.0', '>=')) {
+            return;
+        }
+
+        // Check if old columns exist (amount_real8, real8_price)
+        $columns = $wpdb->get_col("DESCRIBE $table_name", 0);
+
+        // Add new columns if they don't exist
+        if (!in_array('asset_code', $columns)) {
+            $wpdb->query("ALTER TABLE $table_name ADD COLUMN asset_code VARCHAR(12) NOT NULL DEFAULT 'REAL8' AFTER memo");
+        }
+
+        if (!in_array('asset_issuer', $columns)) {
+            $wpdb->query("ALTER TABLE $table_name ADD COLUMN asset_issuer VARCHAR(56) DEFAULT NULL AFTER asset_code");
+        }
+
+        // Rename old columns to new generic names
+        if (in_array('amount_real8', $columns) && !in_array('amount_token', $columns)) {
+            $wpdb->query("ALTER TABLE $table_name CHANGE amount_real8 amount_token DECIMAL(20,7) NOT NULL");
+        }
+
+        if (in_array('real8_price', $columns) && !in_array('token_price', $columns)) {
+            $wpdb->query("ALTER TABLE $table_name CHANGE real8_price token_price DECIMAL(15,8) NOT NULL");
+        }
+
+        // Set REAL8 issuer for existing records (they were all REAL8)
+        $wpdb->query($wpdb->prepare(
+            "UPDATE $table_name SET asset_issuer = %s WHERE asset_issuer IS NULL AND asset_code = 'REAL8'",
+            REAL8_GW_ASSET_ISSUER
+        ));
+
+        // Add index on asset_code if it doesn't exist
+        $indexes = $wpdb->get_results("SHOW INDEX FROM $table_name WHERE Key_name = 'asset_code'");
+        if (empty($indexes)) {
+            $wpdb->query("ALTER TABLE $table_name ADD INDEX asset_code (asset_code)");
+        }
+
+        // Update version
+        update_option('real8_gateway_db_version', REAL8_GATEWAY_DB_VERSION);
     }
 
     private function set_default_options() {
