@@ -65,7 +65,7 @@ msgstr "Descripción del método de pago mostrada durante el proceso de compra"
 
 #: includes/class-payment-gateway.php:88
 msgid "Pay with REAL8 through the Stellar network. Fast, secure, and with very low fees."
-msgstr "Pague con REAL8 a través de la red Stellar. Rápido, seguro y con muy bajas comisiones."
+msgstr "Pague con REAL8 en la red Stellar."
 
 #: includes/class-payment-gateway.php:92
 msgid "Your Stellar Public Key"
@@ -192,7 +192,7 @@ msgstr "La cuenta existe en Stellar"
 #: includes/class-payment-gateway.php:613
 #. translators: %s: XLM balance amount
 msgid "Funded with %s XLM"
-msgstr "Fondeada con %s XLM"
+msgstr "Activada con %s XLM"
 
 #: includes/class-payment-gateway.php:618
 #. translators: %s: XLM balance amount

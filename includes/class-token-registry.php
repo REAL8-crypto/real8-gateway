@@ -32,7 +32,7 @@ class REAL8_Token_Registry {
         ),
         'REAL8' => array(
             'code' => 'REAL8',
-            'name' => 'REAL8 Token',
+            'name' => 'Moneda REAL8',
             'issuer' => 'GBVYYQ7XXRZW6ZCNNCL2X2THNPQ6IM4O47HAA25JTAG7Z3CXJCQ3W4CD',
             'decimals' => 7,
             'is_native' => false,
@@ -42,7 +42,7 @@ class REAL8_Token_Registry {
         ),
         'wREAL8' => array(
             'code' => 'wREAL8',
-            'name' => 'Wrapped REAL8',
+            'name' => 'REAL8 envuelto',
             'issuer' => 'GADYIWMD5P75ZHTVIIF6ADU6GYE5T7WRZIHAU4LPAZ4F5IMPD7NRK7V7',
             'decimals' => 7,
             'is_native' => false,
@@ -52,7 +52,7 @@ class REAL8_Token_Registry {
         ),
         'USDC' => array(
             'code' => 'USDC',
-            'name' => 'USD Coin',
+            'name' => 'Moneda USD',
             'issuer' => 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
             'decimals' => 7,
             'is_native' => false,
@@ -62,7 +62,7 @@ class REAL8_Token_Registry {
         ),
         'EURC' => array(
             'code' => 'EURC',
-            'name' => 'Euro Coin',
+            'name' => 'Moneda Euro',
             'issuer' => 'GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2',
             'decimals' => 7,
             'is_native' => false,

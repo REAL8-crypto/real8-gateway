@@ -29,7 +29,7 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
         $this->id = 'real8_payment';
         $this->icon = '';
         $this->has_fields = true; // Enable payment fields for token selector
-        $this->method_title = __('Stellar Payment', 'real8-gateway');
+        $this->method_title = __('REAL8 Payments', 'real8-gateway');
         $this->method_description = __('Accept payments in Stellar tokens (XLM, REAL8, USDC, EURC, SLVR, GOLD)', 'real8-gateway');
 
         // Supported features
@@ -80,7 +80,7 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
             'enabled' => array(
                 'title' => __('Enable/Disable', 'real8-gateway'),
                 'type' => 'checkbox',
-                'label' => __('Enable Stellar Payment', 'real8-gateway'),
+                'label' => __('Habilitar Pagos REAL8 / Stellar', 'real8-gateway'),
                 'default' => 'no',
             ),
             'title' => array(
@@ -98,7 +98,7 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
                 'desc_tip' => true,
             ),
             'accepted_tokens' => array(
-                'title' => __('Accepted Tokens', 'real8-gateway'),
+                'title' => __('Criptomonedas aceptadas', 'real8-gateway'),
                 'type' => 'multiselect',
                 'class' => 'wc-enhanced-select',
                 'description' => __('Select which Stellar tokens to accept as payment. You must have trustlines for non-XLM tokens.', 'real8-gateway'),
@@ -842,7 +842,7 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
 
         // Token trustlines
         $html .= '<div class="stellar-trustlines" style="margin-top: 10px;">';
-        $html .= '<strong>' . esc_html__('Token Trustlines:', 'real8-gateway') . '</strong>';
+        $html .= '<strong>' . esc_html__('Lineas de Confianza:', 'real8-gateway') . '</strong>';
         $html .= '<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;">';
 
         foreach (REAL8_Token_Registry::get_all_tokens() as $token_code => $token) {
@@ -886,7 +886,7 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
         if ($enabled_missing === 0 && $status['xlm_balance'] >= 1.5) {
             $html .= '<div class="stellar-status-box stellar-status-success" style="margin-top: 10px;">
                 <span class="dashicons dashicons-yes-alt"></span>
-                <span><strong>' . esc_html__('Ready to receive Stellar payments!', 'real8-gateway') . '</strong></span>
+                <span><strong>' . esc_html__('Cuenta preparada para recibir Pagos REAL8 / Stellar', 'real8-gateway') . '</strong></span>
             </div>';
         } elseif ($enabled_missing > 0) {
             $html .= '<div class="stellar-status-box stellar-status-warning" style="margin-top: 10px;">
