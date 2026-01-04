@@ -120,12 +120,22 @@ class REAL8_Payment_Monitor {
             array('%d')
         );
 
-        // Get asset code for message
+        // Get asset code and amount for message
         $asset_code = isset($payment->asset_code) ? $payment->asset_code : 'REAL8';
+        $amount = isset($payment->amount_token) ? $payment->amount_token : 0;
+        $memo = isset($payment->memo) ? $payment->memo : '';
 
-        // Update order status
+        // Update order status with detailed note
         $order = wc_get_order($payment->order_id);
         if ($order && $order->has_status('pending')) {
+            // Add detailed expiration note
+            $order->add_order_note(sprintf(
+                __('Payment EXPIRED. Expected: %1$s %2$s. Memo: %3$s. No matching payment found on Stellar network before deadline.', 'real8-gateway'),
+                number_format($amount, 7),
+                $asset_code,
+                $memo
+            ));
+
             $order->update_status(
                 'failed',
                 sprintf(

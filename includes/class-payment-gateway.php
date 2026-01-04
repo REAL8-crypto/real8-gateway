@@ -314,6 +314,8 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
      */
     public function process_payment($order_id) {
         $order = wc_get_order($order_id);
+        global $wpdb;
+        $table = $wpdb->prefix . 'real8_payments';
 
         // Get selected token
         $selected_token = isset($_POST['stellar_selected_token'])
@@ -333,58 +335,113 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
             return array('result' => 'fail');
         }
 
-        // Calculate token amount
-        $order_total = $order->get_total();
-        $calculation = $this->stellar_api->calculate_token_amount($order_total, $selected_token, true);
+        // Check if there's an existing pending payment for this order
+        $existing_payment = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE order_id = %d AND status = 'pending'",
+            $order_id
+        ));
 
-        if (is_wp_error($calculation)) {
-            wc_add_notice(__('Unable to calculate payment amount. Please try again.', 'real8-gateway'), 'error');
-            return array('result' => 'fail');
+        // Check if existing payment is still valid (not expired and same token)
+        $reuse_existing = false;
+        if ($existing_payment) {
+            $expires_at_ts = strtotime($existing_payment->expires_at);
+            $same_token = ($existing_payment->asset_code === $selected_token);
+            $not_expired = (time() < $expires_at_ts);
+
+            if ($same_token && $not_expired) {
+                $reuse_existing = true;
+            }
         }
 
-        // Generate unique memo
-        $memo = $this->stellar_api->generate_payment_memo($order_id);
+        if ($reuse_existing) {
+            // Reuse existing memo and payment details
+            $memo = $existing_payment->memo;
+            $expires_at = $existing_payment->expires_at;
+            $token_amount = $existing_payment->amount_token;
+            $token_price = $existing_payment->token_price;
 
-        // Calculate expiry time
-        $expires_at = gmdate('Y-m-d H:i:s', time() + ($this->payment_timeout * 60));
+            // Add order note about returning customer
+            $order->add_order_note(sprintf(
+                __('Customer returned to pay. Reusing existing payment details: %1$s %2$s, Memo: %3$s, Expires: %4$s', 'real8-gateway'),
+                number_format($token_amount, 7),
+                $selected_token,
+                $memo,
+                $expires_at
+            ));
+        } else {
+            // Calculate token amount fresh
+            $order_total = $order->get_total();
+            $calculation = $this->stellar_api->calculate_token_amount($order_total, $selected_token, true);
 
-        // Save payment record to database
-        global $wpdb;
-        $table = $wpdb->prefix . 'real8_payments';
+            if (is_wp_error($calculation)) {
+                wc_add_notice(__('Unable to calculate payment amount. Please try again.', 'real8-gateway'), 'error');
+                return array('result' => 'fail');
+            }
 
-        $wpdb->replace($table, array(
-            'order_id' => $order_id,
-            'memo' => $memo,
-            'asset_code' => $selected_token,
-            'asset_issuer' => $token['issuer'],
-            'amount_token' => $calculation['token_amount'],
-            'amount_usd' => $order_total,
-            'token_price' => $calculation['price_per_token'],
-            'merchant_address' => $this->merchant_address,
-            'status' => 'pending',
-            'expires_at' => $expires_at,
-            'created_at' => current_time('mysql', true),
-        ), array('%d', '%s', '%s', '%s', '%f', '%f', '%f', '%s', '%s', '%s', '%s'));
+            // Check if we have an existing memo we should reuse (even if token changed)
+            $existing_memo = $order->get_meta('_stellar_payment_memo');
+            if (!empty($existing_memo)) {
+                $memo = $existing_memo;
+            } else {
+                // Generate unique memo
+                $memo = $this->stellar_api->generate_payment_memo($order_id);
+            }
 
-        // Save payment details to order meta
-        $order->update_meta_data('_stellar_payment_memo', $memo);
-        $order->update_meta_data('_stellar_asset_code', $selected_token);
-        $order->update_meta_data('_stellar_asset_issuer', $token['issuer']);
-        $order->update_meta_data('_stellar_payment_amount', $calculation['token_amount']);
-        $order->update_meta_data('_stellar_payment_price', $calculation['price_per_token']);
-        $order->update_meta_data('_stellar_payment_expires', $expires_at);
-        $order->update_meta_data('_stellar_merchant_address', $this->merchant_address);
+            // Calculate expiry time
+            $expires_at = gmdate('Y-m-d H:i:s', time() + ($this->payment_timeout * 60));
+            $token_amount = $calculation['token_amount'];
+            $token_price = $calculation['price_per_token'];
 
-        // Update order status to pending payment
-        $order->update_status('pending', sprintf(
-            /* translators: %s: token code */
-            __('Awaiting %s payment', 'real8-gateway'),
-            $selected_token
-        ));
+            // Save payment record to database (replace any existing)
+            $wpdb->replace($table, array(
+                'order_id' => $order_id,
+                'memo' => $memo,
+                'asset_code' => $selected_token,
+                'asset_issuer' => $token['issuer'],
+                'amount_token' => $token_amount,
+                'amount_usd' => $order_total,
+                'token_price' => $token_price,
+                'merchant_address' => $this->merchant_address,
+                'status' => 'pending',
+                'expires_at' => $expires_at,
+                'created_at' => current_time('mysql', true),
+            ), array('%d', '%s', '%s', '%s', '%f', '%f', '%f', '%s', '%s', '%s', '%s'));
+
+            // Add detailed order note for payment initiation
+            $order->add_order_note(sprintf(
+                __('Stellar payment initiated: %1$s %2$s (@ $%3$s/%2$s). Memo: %4$s. Address: %5$s. Expires: %6$s', 'real8-gateway'),
+                number_format($token_amount, 7),
+                $selected_token,
+                number_format($token_price, 6),
+                $memo,
+                $this->merchant_address,
+                $expires_at
+            ));
+
+            // Save payment details to order meta
+            $order->update_meta_data('_stellar_payment_memo', $memo);
+            $order->update_meta_data('_stellar_asset_code', $selected_token);
+            $order->update_meta_data('_stellar_asset_issuer', $token['issuer']);
+            $order->update_meta_data('_stellar_payment_amount', $token_amount);
+            $order->update_meta_data('_stellar_payment_price', $token_price);
+            $order->update_meta_data('_stellar_payment_expires', $expires_at);
+            $order->update_meta_data('_stellar_merchant_address', $this->merchant_address);
+        }
+
+        // Update order status to pending payment (if not already)
+        if (!$order->has_status('pending')) {
+            $order->update_status('pending', sprintf(
+                /* translators: %s: token code */
+                __('Awaiting %s payment', 'real8-gateway'),
+                $selected_token
+            ));
+        }
         $order->save();
 
-        // Empty cart
-        WC()->cart->empty_cart();
+        // Empty cart (if not already empty)
+        if (WC()->cart && !WC()->cart->is_empty()) {
+            WC()->cart->empty_cart();
+        }
 
         // Return success and redirect to thank you page
         return array(
@@ -494,7 +551,7 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
      * Enqueue scripts for payment page
      */
     public function enqueue_scripts() {
-        if (is_checkout() || is_wc_endpoint_url('order-received')) {
+        if (is_checkout() || is_wc_endpoint_url('order-received') || is_wc_endpoint_url('order-pay')) {
             wp_enqueue_style(
                 'stellar-gateway-checkout',
                 REAL8_GATEWAY_PLUGIN_URL . 'assets/css/checkout.css',
@@ -510,7 +567,7 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
                 true
             );
 
-            wp_localize_script('stellar-gateway-checkout', 'stellar_gateway', array(
+            wp_localize_script('stellar-gateway-checkout', 'real8_gateway', array(
                 'ajax_url' => admin_url('admin-ajax.php'),
                 'nonce' => wp_create_nonce('stellar_gateway_nonce'),
                 'check_interval' => 15000,

@@ -5,6 +5,26 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.1] - 2026-01-04
+
+### Fixed
+- **Critical JS error: "real8_gateway is not defined"** - Fixed variable name mismatch between PHP localization (`stellar_gateway`) and JavaScript (`real8_gateway`)
+- **Memo persistence for returning customers** - When a customer returns to pay an existing pending order, the original memo is now preserved instead of generating a new one. This prevents payment matching failures.
+- **Script loading on order-pay page** - Scripts now load correctly when customers pay from My Account > Orders > Pay
+
+### Added
+- **Comprehensive order notes** - Payment details are now logged to WooCommerce order notes:
+  - Payment initiated: amount, token, price, memo, address, expiry time
+  - Customer returns: note when reusing existing payment details
+  - Payment expired: detailed note with expected amount and memo
+  - Payment confirmed: (already existed) transaction details
+
+### Changed
+- Improved payment flow: if customer returns before expiry with same token, uses existing payment details
+- Improved payment flow: if token changed or expired, generates new payment but reuses original memo
+
+---
+
 ## [3.0.0] - 2026-01-03
 
 ### Added
