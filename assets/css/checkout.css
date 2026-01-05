@@ -166,3 +166,29 @@
 .real8-stat-card.danger .value {
     color: #dc3545;
 }
+
+
+/* Manual check button */
+.real8-manual-check-wrap {
+    margin-top: 10px;
+}
+
+.real8-manual-check-wrap .real8-manual-check-btn {
+    width: 100%;
+    margin: 6px 0 4px;
+}
+
+.real8-manual-check-msg {
+    margin: 6px 0 0;
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+.real8-manual-check-msg.is-error { color: #b91c1c; }
+.real8-manual-check-msg.is-ok { color: #166534; }
+
+.real8-manual-check-hint {
+    display: block;
+    opacity: 0.8;
+    font-size: 12px;
+}

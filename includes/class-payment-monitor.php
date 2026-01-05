@@ -53,15 +53,16 @@ class REAL8_Payment_Monitor {
         }
 
         $gateway_settings = get_option('woocommerce_real8_payment_settings');
-        $merchant_address = isset($gateway_settings['merchant_address']) ? $gateway_settings['merchant_address'] : '';
+        $default_merchant_address = isset($gateway_settings['merchant_address']) ? (string) $gateway_settings['merchant_address'] : '';
 
-        if (empty($merchant_address)) {
+        if (empty($default_merchant_address)) {
             error_log('REAL8 Gateway: No merchant address configured');
             return;
         }
 
-        foreach ($pending as $payment) {
-            $this->check_single_payment($payment, $merchant_address);
+foreach ($pending as $payment) {
+            $merchant_for_payment = !empty($payment->merchant_address) ? (string) $payment->merchant_address : $default_merchant_address;
+            $this->check_single_payment($payment, $merchant_for_payment);
         }
     }
 
@@ -92,11 +93,18 @@ class REAL8_Payment_Monitor {
         // Check for payment on Stellar
         $result = $this->stellar_api->check_payment(
             $merchant_address,
-            $payment->memo,
+            trim((string) $payment->memo),
             $expected_amount,
             $asset_code,
             $asset_issuer
         );
+
+        if (is_wp_error($result)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('REAL8 Gateway: check_single_payment error: ' . $result->get_error_message());
+            }
+            return;
+        }
 
         if ($result) {
             $this->mark_payment_confirmed($payment, $result, $asset_code);
@@ -123,7 +131,7 @@ class REAL8_Payment_Monitor {
         // Get asset code and amount for message
         $asset_code = isset($payment->asset_code) ? $payment->asset_code : 'REAL8';
         $amount = isset($payment->amount_token) ? $payment->amount_token : 0;
-        $memo = isset($payment->memo) ? $payment->memo : '';
+        $memo = isset($payment->memo) ? trim((string) $payment->memo) : '';
 
         // Update order status with detailed note
         $order = wc_get_order($payment->order_id);
@@ -297,7 +305,11 @@ class REAL8_Payment_Monitor {
         }
 
         $gateway_settings = get_option('woocommerce_real8_payment_settings');
-        $merchant_address = isset($gateway_settings['merchant_address']) ? $gateway_settings['merchant_address'] : '';
+        // Prefer the address stored with this payment record (future-proof if settings change)
+        $merchant_address = !empty($payment->merchant_address) ? (string) $payment->merchant_address : '';
+        if (empty($merchant_address)) {
+            $merchant_address = isset($gateway_settings['merchant_address']) ? (string) $gateway_settings['merchant_address'] : '';
+        }
 
         if (empty($merchant_address)) {
             return new WP_Error('no_address', __('Merchant address not configured', 'real8-gateway'));
@@ -310,11 +322,15 @@ class REAL8_Payment_Monitor {
 
         $result = $this->stellar_api->check_payment(
             $merchant_address,
-            $payment->memo,
+            trim((string) $payment->memo),
             $expected_amount,
             $asset_code,
             $asset_issuer
         );
+
+        if (is_wp_error($result)) {
+            return $result;
+        }
 
         if ($result) {
             $this->mark_payment_confirmed($payment, $result, $asset_code);

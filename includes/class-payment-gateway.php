@@ -23,6 +23,14 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
     private $stellar_api;
 
     /**
+     * Amount tolerance settings (helps reduce false negatives from rounding/fees)
+     * - percent: allows small underpayment as a percentage of expected
+     * - min: minimum absolute tolerance in token units
+     */
+    private $amount_tolerance_percent = 0.0;
+    private $amount_tolerance_min = '0.0000000';
+
+    /**
      * Constructor
      */
     public function __construct() {
@@ -50,6 +58,16 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
         $this->payment_timeout = $this->get_option('payment_timeout', REAL8_GW_PAYMENT_TIMEOUT_MINUTES);
         $this->price_buffer = $this->get_option('price_buffer', REAL8_GW_PRICE_BUFFER_PERCENT);
 
+        // Tolerance defaults are stored in options so the monitor can read them without a gateway instance.
+        $this->amount_tolerance_percent = (float) $this->get_option(
+            'amount_tolerance_percent',
+            (float) get_option('real8_gateway_amount_tolerance_percent', 1.0)
+        );
+        $this->amount_tolerance_min = (string) $this->get_option(
+            'amount_tolerance_min',
+            (string) get_option('real8_gateway_amount_tolerance_min', '0.0000001')
+        );
+
         // Ensure accepted_tokens is an array
         if (!is_array($this->accepted_tokens)) {
             $this->accepted_tokens = array($this->accepted_tokens);
@@ -65,11 +83,12 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
         add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
 
-        // AJAX handlers
-        add_action('wp_ajax_real8_check_payment_status', array($this, 'ajax_check_payment_status'));
-        add_action('wp_ajax_nopriv_real8_check_payment_status', array($this, 'ajax_check_payment_status'));
-        add_action('wp_ajax_stellar_get_token_prices', array($this, 'ajax_get_token_prices'));
-        add_action('wp_ajax_nopriv_stellar_get_token_prices', array($this, 'ajax_get_token_prices'));
+        // AJAX handlers        // WooCommerce WC-AJAX handlers (bypasses /wp-admin/admin ajax.php blocks)
+        add_action('wc_ajax_real8_check_payment_status', array($this, 'ajax_check_payment_status'));
+        add_action('wc_ajax_nopriv_real8_check_payment_status', array($this, 'ajax_check_payment_status'));
+        add_action('wc_ajax_stellar_get_token_prices', array($this, 'ajax_get_token_prices'));
+        add_action('wc_ajax_nopriv_stellar_get_token_prices', array($this, 'ajax_get_token_prices'));
+
     }
 
     /**
@@ -139,7 +158,43 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
                     'step' => '0.5',
                 ),
             ),
+
+            // Amount tolerance (optional)
+            'amount_tolerance_percent' => array(
+                'title'       => __('Underpayment Tolerance (%)', 'real8-gateway'),
+                'type'        => 'number',
+                'description' => __('Allows a small underpayment (percentage of expected token amount) to avoid false negatives caused by rounding/fees. Set 0 to require the exact amount.', 'real8-gateway'),
+                'default'     => (float) get_option('real8_gateway_amount_tolerance_percent', 1.0),
+                'desc_tip'    => true,
+                'custom_attributes' => array(
+                    'min'  => 0,
+                    'max'  => 10,
+                    'step' => '0.1',
+                ),
+            ),
+            'amount_tolerance_min' => array(
+                'title'       => __('Minimum Tolerance (token units)', 'real8-gateway'),
+                'type'        => 'text',
+                'description' => __('Minimum absolute tolerance in the selected token (e.g. 0.05). This is applied if it is larger than the percent tolerance.', 'real8-gateway'),
+                'default'     => (string) get_option('real8_gateway_amount_tolerance_min', '0.0000001'),
+                'desc_tip'    => true,
+            ),
         );
+    }
+
+    /**
+     * Persist tolerance settings for background monitor usage.
+     */
+    public function process_admin_options() {
+        $saved = parent::process_admin_options();
+
+        // Mirror into standalone options so the cron monitor can read them without depending on gateway settings load.
+        $p = (float) $this->get_option('amount_tolerance_percent', 1.0);
+        $m = (string) $this->get_option('amount_tolerance_min', '0.0000001');
+        update_option('real8_gateway_amount_tolerance_percent', $p);
+        update_option('real8_gateway_amount_tolerance_min', $m);
+
+        return $saved;
     }
 
     /**
@@ -314,6 +369,13 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
      */
     public function process_payment($order_id) {
         $order = wc_get_order($order_id);
+        // If guest, require a valid order_key to avoid order enumeration
+        if ($order && !is_user_logged_in()) {
+            $real_key = $order->get_order_key();
+            if (!$order_key || !hash_equals($real_key, $order_key)) {
+                wp_send_json_error(array('message' => 'Invalid order'), 403);
+            }
+        }
         global $wpdb;
         $table = $wpdb->prefix . 'real8_payments';
 
@@ -567,8 +629,10 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
                 true
             );
 
-            wp_localize_script('stellar-gateway-checkout', 'real8_gateway', array(
-                'ajax_url' => admin_url('admin-ajax.php'),
+            wp_localize_script('stellar-gateway-checkout', 'real8_gateway', array(                'wc_ajax_url' => add_query_arg('wc-ajax', 'real8_check_payment_status', home_url('/')),                'wc_ajax_prices_url' => add_query_arg('wc-ajax', 'stellar_get_token_prices', home_url('/')),
+                'home_url' => home_url('/'),
+                'rest_check_url' => rest_url('real8-gateway/v1/check'),
+                'order_key' => isset($_GET['key']) ? wc_clean(wp_unslash($_GET['key'])) : '',
                 'nonce' => wp_create_nonce('stellar_gateway_nonce'),
                 'check_interval' => 15000,
                 'accepted_tokens' => $this->accepted_tokens,
@@ -577,6 +641,9 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
                     'paid' => __('Payment received! Redirecting...', 'real8-gateway'),
                     'expired' => __('Payment window expired', 'real8-gateway'),
                     'error' => __('Error checking payment', 'real8-gateway'),
+                    'manual_check' => __('Comprobar pago ahora', 'real8-gateway'),
+                    'manual_checking' => __('Comprobando ahora...', 'real8-gateway'),
+                    'manual_checked' => __('Verificación completada.', 'real8-gateway'),
                 ),
             ));
         }
@@ -586,17 +653,33 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
      * AJAX handler to check payment status
      */
     public function ajax_check_payment_status() {
-        check_ajax_referer('stellar_gateway_nonce', 'nonce');
+        // WC-AJAX endpoint ONLY (no admin ajax). Nonce is optional; validate if present.
+        $nonce = isset($_REQUEST['nonce']) ? sanitize_text_field(wp_unslash($_REQUEST['nonce'])) : '';
+        if ($nonce && !wp_verify_nonce($nonce, 'stellar_gateway_nonce')) {
+            wp_send_json_error(array('message' => 'Invalid nonce'), 403);
+        }
 
-        $order_id = isset($_POST['order_id']) ? absint($_POST['order_id']) : 0;
+        $order_id  = isset($_REQUEST['order_id']) ? absint($_REQUEST['order_id']) : 0;
+        $order_key = isset($_REQUEST['order_key']) ? sanitize_text_field(wp_unslash($_REQUEST['order_key'])) : '';
+        $force     = isset($_REQUEST['force']) ? (int) $_REQUEST['force'] : 0;
 
         if (!$order_id) {
-            wp_send_json_error(array('message' => 'Invalid order'));
+            wp_send_json_error(array('message' => 'Invalid order'), 400);
         }
 
         $order = wc_get_order($order_id);
         if (!$order) {
-            wp_send_json_error(array('message' => 'Order not found'));
+            wp_send_json_error(array('message' => 'Order not found'), 404);
+        }
+
+        // Security: require a valid order key for guest checks.
+        if (!$order_key || !hash_equals($order->get_order_key(), $order_key)) {
+            wp_send_json_error(array('message' => 'Invalid order'), 403);
+        }
+
+        // Ensure this order uses this gateway.
+        if ($order->get_payment_method() !== 'real8_payment') {
+            wp_send_json_error(array('message' => 'Invalid order'), 400);
         }
 
         // Get payment record
@@ -608,12 +691,12 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
         ));
 
         if (!$payment) {
-            wp_send_json_error(array('message' => 'Payment not found'));
+            wp_send_json_error(array('message' => 'Payment not found'), 404);
         }
 
-        // Check if expired
+        // Expiry handling (keep DB + order consistent)
         $expires_at = strtotime($payment->expires_at);
-        if (time() > $expires_at && $payment->status === 'pending') {
+        if ($expires_at && time() > $expires_at && $payment->status === 'pending') {
             $wpdb->update($table, array('status' => 'expired'), array('order_id' => $order_id));
 
             $asset_code = isset($payment->asset_code) ? $payment->asset_code : 'REAL8';
@@ -626,24 +709,67 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
             wp_send_json_success(array(
                 'status' => 'expired',
                 'message' => __('Payment window has expired', 'real8-gateway'),
+                'expires_in' => 0,
             ));
         }
 
-        // Return current status
-        wp_send_json_success(array(
-            'status' => $payment->status,
-            'tx_hash' => $payment->stellar_tx_hash,
-            'expires_in' => max(0, $expires_at - time()),
+        // Optional: trigger a manual on-demand check (throttled) to confirm faster after user pays.
+        $should_check = $force || $payment->status === 'pending';
+        $did_check = false;
+        $check_error = '';
+
+        if ($should_check) {
+            $lock_key = 'real8_manual_check_lock_' . $order_id;
+            if (!get_transient($lock_key)) {
+                set_transient($lock_key, 1, 20); // prevent hammering the Stellar API
+                $did_check = true;
+
+                if (class_exists('REAL8_Payment_Monitor')) {
+                    $monitor = REAL8_Payment_Monitor::get_instance();
+                    $result = $monitor->manual_check_order($order_id);
+
+                    if (is_wp_error($result)) {
+                        $check_error = $result->get_error_message();
+                    }
+                } else {
+                    $check_error = 'Payment monitor not available';
+                }
+            }
+        }
+
+        // Re-fetch after a manual check attempt (so we return current state)
+        $payment = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE order_id = %d",
+            $order_id
         ));
+
+        $expires_at = strtotime($payment->expires_at);
+        $response = array(
+            'status' => $payment->status,
+            'tx_hash' => isset($payment->stellar_tx_hash) ? $payment->stellar_tx_hash : '',
+            'expires_in' => $expires_at ? max(0, $expires_at - time()) : 0,
+            'checked' => $did_check ? 1 : 0,
+        );
+
+        if ($check_error) {
+            $response['check_error'] = $check_error;
+        }
+
+        wp_send_json_success($response);
     }
+
+
 
     /**
      * AJAX handler to get token prices
      */
     public function ajax_get_token_prices() {
-        check_ajax_referer('stellar_gateway_nonce', 'nonce');
+        $nonce = isset($_REQUEST['nonce']) ? sanitize_text_field(wp_unslash($_REQUEST['nonce'])) : '';
+        if ($nonce && !wp_verify_nonce($nonce, 'stellar_gateway_nonce')) {
+            wp_send_json_error(array('message' => 'Invalid nonce'), 403);
+        }
 
-        $tokens = isset($_POST['tokens']) ? array_map('sanitize_text_field', (array) $_POST['tokens']) : $this->accepted_tokens;
+        $tokens = isset($_REQUEST['tokens']) ? array_map('sanitize_text_field', (array) $_POST['tokens']) : $this->accepted_tokens;
         $prices = $this->stellar_api->get_all_token_prices($tokens);
 
         wp_send_json_success(array(
@@ -678,9 +804,7 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
             true
         );
 
-        wp_localize_script('stellar-gateway-admin', 'stellar_admin', array(
-            'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('stellar_admin_nonce'),
+        wp_localize_script('stellar-gateway-admin', 'stellar_admin', array(            'nonce' => wp_create_nonce('stellar_admin_nonce'),
             'strings' => array(
                 'checking' => __('Checking wallet status...', 'real8-gateway'),
                 'valid' => __('Valid', 'real8-gateway'),
