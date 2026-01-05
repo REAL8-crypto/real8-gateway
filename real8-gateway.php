@@ -3,7 +3,7 @@
  * Plugin Name: REAL8 Gateway for WooCommerce
  * Plugin URI: https://real8.org
  * Description: Accept Stellar token payments (XLM, REAL8, USDC, EURC, SLVR, GOLD) for WooCommerce orders
- * Version: 3.0.1
+* Version: 3.0.8.3
  * Author: REAL8
  * Author URI: https://real8.org
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('REAL8_GATEWAY_VERSION', '3.0.1');
+define('REAL8_GATEWAY_VERSION', '3.0.8.3');
 define('REAL8_GATEWAY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('REAL8_GATEWAY_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('REAL8_GATEWAY_PLUGIN_FILE', __FILE__);
@@ -67,7 +67,10 @@ class REAL8_Gateway {
         add_action('init', array($this, 'init'));
         add_action('plugins_loaded', array($this, 'load_textdomain'));
         add_action('before_woocommerce_init', array($this, 'declare_hpos_compatibility'));
-        add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), array($this, 'add_settings_link'));
+        
+        // REST API endpoints (fallback when caches block wc-ajax)
+        add_action('rest_api_init', array($this, 'register_rest_routes'));
+add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), array($this, 'add_settings_link'));
         register_activation_hook(REAL8_GATEWAY_PLUGIN_FILE, array($this, 'activate'));
         register_deactivation_hook(REAL8_GATEWAY_PLUGIN_FILE, array($this, 'deactivate'));
 
@@ -267,6 +270,150 @@ class REAL8_Gateway {
             wp_unschedule_event($timestamp, 'real8_gateway_check_payments');
         }
     }
+
+    /**
+     * REST routes (fallback when caches/HTML delivery block WC-AJAX).
+     *
+     * POST /wp-json/real8-gateway/v1/check
+     * Params: order_id, order_key, force (0|1)
+     */
+    public function register_rest_routes() {
+        // WooCommerce required.
+        if (!function_exists('wc_get_order')) {
+            return;
+        }
+
+        // rest_api_init may run before our init() on some sites; ensure classes exist.
+        if (!class_exists('REAL8_Payment_Monitor') || !class_exists('REAL8_Stellar_Payment_API')) {
+            $this->include_files();
+        }
+
+        register_rest_route('real8-gateway/v1', '/check', array(
+            'methods' => 'POST',
+            'callback' => array($this, 'rest_check_payment_status'),
+            'permission_callback' => '__return_true',
+        ));
+    }
+
+    public function rest_check_payment_status(\WP_REST_Request $request) {
+        if (function_exists('nocache_headers')) {
+            nocache_headers();
+        }
+
+        $order_id  = absint($request->get_param('order_id'));
+        $order_key = sanitize_text_field((string) $request->get_param('order_key'));
+        $force     = (int) $request->get_param('force');
+
+        $send_error = function($message, $code = 'error') {
+            if (function_exists('ob_get_length') && ob_get_length()) {
+                @ob_clean();
+            }
+            return new \WP_REST_Response(array(
+                'success' => false,
+                'data' => array(
+                    'message' => (string) $message,
+                    'code' => (string) $code,
+                ),
+            ), 200);
+        };
+
+        if (!$order_id) {
+            return $send_error(__('Invalid order', 'real8-gateway'), 'invalid_order');
+        }
+
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            return $send_error(__('Order not found', 'real8-gateway'), 'order_not_found');
+        }
+
+        // Security: require a valid order key for guest checks.
+        if (!$order_key || !hash_equals($order->get_order_key(), $order_key)) {
+            return $send_error(__('Invalid order', 'real8-gateway'), 'invalid_order_key');
+        }
+
+        // Ensure this order uses this gateway.
+        if ($order->get_payment_method() !== 'real8_payment') {
+            return $send_error(__('Invalid payment method', 'real8-gateway'), 'invalid_gateway');
+        }
+
+        global $wpdb;
+        $table = $wpdb->prefix . 'real8_payments';
+        $payment = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE order_id = %d",
+            $order_id
+        ));
+
+        if (!$payment) {
+            return $send_error(__('Payment not found', 'real8-gateway'), 'payment_not_found');
+        }
+
+        // Expiry handling (keep DB + order consistent)
+        $expires_at = strtotime($payment->expires_at);
+        if ($expires_at && time() > $expires_at && $payment->status === 'pending') {
+            $wpdb->update($table, array('status' => 'expired'), array('order_id' => $order_id));
+
+            $asset_code = isset($payment->asset_code) ? $payment->asset_code : 'REAL8';
+            $order->update_status('failed', sprintf(
+                /* translators: %s: token code */
+                __('%s payment expired', 'real8-gateway'),
+                $asset_code
+            ));
+
+            return new \WP_REST_Response(array(
+                'success' => true,
+                'data' => array(
+                    'status' => 'expired',
+                    'message' => __('Payment window has expired', 'real8-gateway'),
+                    'expires_in' => 0,
+                ),
+            ), 200);
+        }
+
+        // Optional: trigger a manual on-demand check (throttled) to confirm faster after user pays.
+        $should_check = $force || $payment->status === 'pending';
+        $did_check = false;
+        $check_error = '';
+
+        if ($should_check) {
+            $lock_key = 'real8_manual_check_lock_' . $order_id;
+            if (!get_transient($lock_key)) {
+                set_transient($lock_key, 1, 20); // prevent hammering the Stellar API
+                $did_check = true;
+
+                if (class_exists('REAL8_Payment_Monitor')) {
+                    $monitor = \REAL8_Payment_Monitor::get_instance();
+                    $result = $monitor->manual_check_order($order_id);
+
+                    if (is_wp_error($result)) {
+                        $check_error = $result->get_error_message();
+                    }
+                } else {
+                    $check_error = 'Payment monitor not available';
+                }
+            }
+        }
+
+        // Re-fetch after a manual check attempt (so we return current state)
+        $payment = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE order_id = %d",
+            $order_id
+        ));
+
+        $expires_at = strtotime($payment->expires_at);
+        $response = array(
+            'status' => $payment->status,
+            'tx_hash' => isset($payment->stellar_tx_hash) ? $payment->stellar_tx_hash : '',
+            'expires_in' => $expires_at ? max(0, $expires_at - time()) : 0,
+            'checked' => $did_check ? 1 : 0,
+        );
+
+        if ($check_error) {
+            $response['check_error'] = $check_error;
+        }
+
+        return new \WP_REST_Response(array('success' => true, 'data' => $response), 200);
+    }
+
 }
 
 /**
@@ -279,6 +426,58 @@ add_filter('cron_schedules', function($schedules) {
     );
     return $schedules;
 });
+
+/**
+ * Add Stellar paid amount to order totals (emails / order details)
+ */
+add_filter('woocommerce_get_order_item_totals', function($totals, $order, $tax_display) {
+    if (!$order || !is_a($order, 'WC_Order')) {
+        return $totals;
+    }
+
+    // Only for this gateway
+    if ($order->get_payment_method() !== 'real8_payment') {
+        return $totals;
+    }
+
+    $asset_code = (string) $order->get_meta('_stellar_asset_code');
+    if ($asset_code === '') {
+        $asset_code = 'REAL8';
+    }
+
+    // Prefer the confirmed on-chain amount; fallback to expected amount
+    $paid_amount = $order->get_meta('_stellar_paid_amount');
+    $expected_amount = $order->get_meta('_stellar_payment_amount');
+    $amount = ($paid_amount !== '' && $paid_amount !== null) ? $paid_amount : $expected_amount;
+
+    if ($amount === '' || $amount === null) {
+        return $totals;
+    }
+
+    $amount_str = wc_format_decimal($amount, 7);
+
+    $row = array(
+        'label' => __('Monto en Stellar:', 'real8-gateway'),
+        'value' => esc_html($amount_str) . ' ' . esc_html($asset_code),
+    );
+
+    // Insert right after payment method if present
+    $new = array();
+    $inserted = false;
+    foreach ($totals as $key => $value) {
+        $new[$key] = $value;
+        if ($key === 'payment_method') {
+            $new['stellar_amount'] = $row;
+            $inserted = true;
+        }
+    }
+
+    if (!$inserted) {
+        $new['stellar_amount'] = $row;
+    }
+
+    return $new;
+}, 20, 3);
 
 /**
  * Initialize the plugin

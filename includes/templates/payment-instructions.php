@@ -25,7 +25,7 @@ $token_color = $token_info ? $token_info['color'] : '#666666';
 $is_native = $token_info ? $token_info['is_native'] : false;
 ?>
 
-<div id="real8-payment-instructions" class="real8-payment-box" data-order-id="<?php echo esc_attr($order->get_id()); ?>" data-status="<?php echo esc_attr($status); ?>">
+<div id="real8-payment-instructions" class="real8-payment-box" data-order-id="<?php echo esc_attr($order->get_id()); ?>" data-order-key="<?php echo esc_attr($order->get_order_key()); ?>" data-status="<?php echo esc_attr($status); ?>">
 
     <?php if ($status === 'completed' || $status === 'confirmed'): ?>
         <!-- Payment Confirmed -->
@@ -136,6 +136,11 @@ $is_native = $token_info ? $token_info['is_native'] : false;
                 <span class="real8-spinner"></span>
                 <?php esc_html_e('Automatically checking for payment...', 'real8-gateway'); ?>
             </p>
+            <div class="real8-manual-check-wrap">
+                <button type="button" class="button real8-manual-check-btn"><?php esc_html_e('Comprobar pago ahora', 'real8-gateway'); ?></button>
+                <p class="real8-manual-check-msg" style="display:none"></p>
+                <small class="real8-manual-check-hint"><?php esc_html_e('Si ya pagaste, haz clic para forzar la verificación.', 'real8-gateway'); ?></small>
+            </div>
             <p class="real8-order-total">
                 <?php
                 printf(

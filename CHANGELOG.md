@@ -5,6 +5,27 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.8.1] - 2026-01-04
+
+### Fixed
+- Payment verification now paginates Horizon `/transactions` (up to 5 pages × 200) before inspecting operations, matching the proven v3.0.7 flow.
+
+---
+
+## [3.0.8] - 2026-01-04
+
+### Added
+- **Underpayment tolerance settings** (percent + minimum) to reduce false negatives caused by rounding/fees.
+
+### Fixed
+- **Restored full multi-asset checkout experience** (token selector + live prices) and **copy buttons** (amount/address/memo) while keeping **WC-AJAX** (no admin-ajax).
+- **More robust on-chain verification** using Horizon transaction + operations scan by memo.
+
+### Changed
+- Payment verification now uses a configurable *minimum acceptable amount* (expected minus tolerance) while still accepting any overpayment.
+
+---
+
 ## [3.0.1] - 2026-01-04
 
 ### Fixed

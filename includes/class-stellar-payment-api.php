@@ -15,6 +15,268 @@ if (!defined('ABSPATH')) {
 }
 
 class REAL8_Stellar_Payment_API {
+    /**
+     * Compare two decimal strings at a given scale.
+     * Returns 1 if $a > $b, 0 if equal, -1 if $a < $b.
+     */
+    private function dec_compare($a, $b, $scale = 7) {
+        $a = is_string($a) ? trim($a) : (string) $a;
+        $b = is_string($b) ? trim($b) : (string) $b;
+
+        if (function_exists('bccomp')) {
+            return bccomp($a, $b, (int) $scale);
+        }
+
+        // Fallback: float compare (best effort)
+        $fa = (float) $a;
+        $fb = (float) $b;
+        if (abs($fa - $fb) < pow(10, -1 * (int) $scale)) return 0;
+        return ($fa > $fb) ? 1 : -1;
+    }
+
+    /**
+     * Add a small tolerance to a decimal string.
+     */
+    private function dec_add_tol($a, $tol = '0.000001', $scale = 7) {
+        $a = is_string($a) ? trim($a) : (string) $a;
+
+        if (function_exists('bcadd')) {
+            return bcadd($a, (string) $tol, (int) $scale);
+        }
+
+        return (string) ((float) $a + (float) $tol);
+    }
+
+    /**
+     * Normalize a numeric string to a fixed decimal scale.
+     */
+    private function normalize_dec($n, $scale = 7) {
+        $n = is_string($n) ? trim($n) : (string) $n;
+        if ($n === '' || !is_numeric($n)) {
+            return number_format(0, (int) $scale, '.', '');
+        }
+        return number_format((float) $n, (int) $scale, '.', '');
+    }
+
+    private function dec_sub($a, $b, $scale = 7) {
+        $a = $this->normalize_dec($a, $scale);
+        $b = $this->normalize_dec($b, $scale);
+        if (function_exists('bcsub')) {
+            return bcsub($a, $b, (int) $scale);
+        }
+        return $this->normalize_dec(((float) $a - (float) $b), $scale);
+    }
+
+    /**
+     * Compute max(percent-of-expected, min-abs) tolerance.
+     * Stored in standalone options so it works for cron/CLI too.
+     */
+    private function get_amount_tolerance($expected_amount, $scale = 7) {
+        $expected_amount = $this->normalize_dec($expected_amount, $scale);
+
+        $percent = (float) get_option('real8_gateway_amount_tolerance_percent', 1.0);
+        $min_abs = (string) get_option('real8_gateway_amount_tolerance_min', '0.0000001');
+        $min_abs = $this->normalize_dec($min_abs, $scale);
+
+        if ($percent <= 0 && $this->dec_compare($min_abs, '0', $scale) <= 0) {
+            return $this->normalize_dec('0', $scale);
+        }
+
+        $tol_pct = $this->normalize_dec(((float) $expected_amount) * max(0.0, $percent) / 100.0, $scale);
+
+        return ($this->dec_compare($tol_pct, $min_abs, $scale) >= 0) ? $tol_pct : $min_abs;
+    }
+
+    private function min_expected_with_tolerance($expected_amount, $scale = 7) {
+        $expected_amount = $this->normalize_dec($expected_amount, $scale);
+        $tol = $this->get_amount_tolerance($expected_amount, $scale);
+
+        // expected - tol (clamped to >= 0)
+        $min_expected = $this->dec_sub($expected_amount, $tol, $scale);
+        if ($this->dec_compare($min_expected, '0', $scale) < 0) {
+            return $this->normalize_dec('0', $scale);
+        }
+        return $min_expected;
+    }
+
+    /**
+     * Fetch JSON from Horizon and return decoded array.
+     */
+    private function horizon_get_json($url, $timeout = 15) {
+        $response = wp_remote_get($url, array(
+            'timeout' => $timeout,
+            'headers' => array(
+                'Accept' => 'application/json',
+            ),
+        ));
+
+        if (is_wp_error($response)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('REAL8 Gateway: Horizon request error: ' . $response->get_error_message() . ' URL: ' . $url);
+            }
+            return new WP_Error('horizon_error', $response->get_error_message());
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+
+        if ($code !== 200) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('REAL8 Gateway: Horizon status ' . $code . ' URL: ' . $url . ' BODY: ' . substr($body, 0, 300));
+            }
+            return new WP_Error('horizon_status', 'Horizon returned HTTP ' . $code);
+        }
+
+        $data = json_decode($body, true);
+        if (!is_array($data)) {
+            return new WP_Error('horizon_json', 'Invalid JSON from Horizon');
+        }
+        return $data;
+    }
+
+    /**
+     * Robust check by scanning recent transactions (memo is available directly in /transactions).
+     * This supports payment + path_payment operations reliably.
+     */
+    private function check_payment_via_transactions($merchant_address, $memo, $expected_amount, $asset_code = 'REAL8', $asset_issuer = null) {
+        // v3.0.7-style verification: paginate /transactions to find memo first, then inspect ops for the matching payment
+        $memo = trim((string) $memo);
+        $expected_amount = is_string($expected_amount) ? trim($expected_amount) : (string) $expected_amount;
+
+        // Apply tolerance by reducing the minimum acceptable amount.
+        $min_expected = $this->min_expected_with_tolerance($expected_amount, 7);
+        $is_native = REAL8_Token_Registry::is_native($asset_code);
+
+        $cursor = null;
+        $pages = 0;
+        $found_tx = null;
+        $tx_hash = '';
+
+        while ($pages < 5) {
+            $params = array('order' => 'desc', 'limit' => 200);
+            if ($cursor) {
+                $params['cursor'] = $cursor;
+            }
+
+            $tx_url = REAL8_GW_HORIZON_URL . '/accounts/' . rawurlencode($merchant_address) . '/transactions?' . http_build_query($params);
+            $tx_data = $this->horizon_get_json($tx_url, 15);
+            if (is_wp_error($tx_data)) {
+                return $tx_data;
+            }
+
+            $records = isset($tx_data['_embedded']['records']) && is_array($tx_data['_embedded']['records']) ? $tx_data['_embedded']['records'] : array();
+            if (empty($records)) {
+                break;
+            }
+
+            foreach ($records as $tx) {
+                if (isset($tx['successful']) && !$tx['successful']) {
+                    continue;
+                }
+
+                // Only consider text memos
+                if (isset($tx['memo_type']) && (string) $tx['memo_type'] !== 'text') {
+                    continue;
+                }
+
+                $tx_memo = isset($tx['memo']) ? (string) $tx['memo'] : '';
+                if (trim($tx_memo) !== $memo) {
+                    continue;
+                }
+
+                $tx_hash = isset($tx['hash']) ? (string) $tx['hash'] : '';
+                if (!$tx_hash) {
+                    continue;
+                }
+
+                $found_tx = $tx;
+                break 2;
+            }
+
+            // paginate using last paging_token
+            $last = end($records);
+            $cursor = (is_array($last) && isset($last['paging_token'])) ? (string) $last['paging_token'] : '';
+            if (!$cursor) {
+                break;
+            }
+
+            $pages++;
+        }
+
+        if (!$found_tx || !$tx_hash) {
+            return false;
+        }
+
+        // Fetch operations for the matching tx and find the payment op to the merchant
+        $ops_url = REAL8_GW_HORIZON_URL . '/transactions/' . rawurlencode($tx_hash) . '/operations?order=asc&limit=200';
+        $ops_data = $this->horizon_get_json($ops_url, 15);
+        if (is_wp_error($ops_data)) {
+            return $ops_data;
+        }
+
+        $ops_records = isset($ops_data['_embedded']['records']) && is_array($ops_data['_embedded']['records']) ? $ops_data['_embedded']['records'] : array();
+        if (empty($ops_records)) {
+            return false;
+        }
+
+        foreach ($ops_records as $op) {
+            $type = isset($op['type']) ? (string) $op['type'] : '';
+            if (!in_array($type, array('payment', 'path_payment_strict_receive', 'path_payment_strict_send', 'path_payment'), true)) {
+                continue;
+            }
+
+            $to = isset($op['to']) ? (string) $op['to'] : '';
+            if ($to !== $merchant_address) {
+                continue;
+            }
+
+            // Asset checks
+            if ($is_native) {
+                // XLM: asset_type must be native
+                if (isset($op['asset_type']) && (string) $op['asset_type'] !== 'native') {
+                    continue;
+                }
+                // Some op payloads may omit asset_type; if asset_code exists, it's not native
+                if (!isset($op['asset_type']) && isset($op['asset_code'])) {
+                    continue;
+                }
+            } else {
+                if (!isset($op['asset_code']) || strtoupper((string) $op['asset_code']) !== strtoupper((string) $asset_code)) {
+                    continue;
+                }
+                if ($asset_issuer && (!isset($op['asset_issuer']) || (string) $op['asset_issuer'] !== (string) $asset_issuer)) {
+                    continue;
+                }
+            }
+
+            // Amount: prefer 'amount' (destination amount).
+            $candidate = isset($op['amount']) ? (string) $op['amount'] : '';
+            if (!$candidate && isset($op['source_amount'])) {
+                $candidate = (string) $op['source_amount'];
+            }
+            if (!$candidate) {
+                continue;
+            }
+
+            // Compare candidate + small stroop tolerance >= minimum acceptable (expected minus configured tolerance)
+            $candidate_plus = $this->dec_add_tol($candidate, '0.000001', 7);
+            if ($this->dec_compare($candidate_plus, $min_expected, 7) >= 0) {
+                return array(
+                    'tx_hash' => $tx_hash,
+                    'amount' => (float) $candidate,
+                    'from' => isset($op['from']) ? (string) $op['from'] : '',
+                    'created_at' => isset($found_tx['created_at']) ? (string) $found_tx['created_at'] : '',
+                    'paging_token' => isset($found_tx['paging_token']) ? (string) $found_tx['paging_token'] : '',
+                    'asset_code' => $is_native ? 'XLM' : (string) $asset_code,
+                    'asset_issuer' => $is_native ? null : (string) $asset_issuer,
+                );
+            }
+        }
+
+        return false;
+    }
+
+
     private static $instance = null;
 
     /**
@@ -328,6 +590,23 @@ class REAL8_Stellar_Payment_API {
      * @return array|false Payment details or false if not found
      */
     public function check_payment($merchant_address, $memo, $expected_amount, $asset_code = 'REAL8', $asset_issuer = null, $since_cursor = null) {
+        // Robust implementation: check recent transactions first (memo available directly).
+        $result = $this->check_payment_via_transactions($merchant_address, $memo, $expected_amount, $asset_code, $asset_issuer);
+
+        if (is_wp_error($result)) {
+            return $result;
+        }
+
+        if ($result) {
+            return $result;
+        }
+
+        // Fallback to legacy payments scan (best effort, may be skipped if too many payments)
+        return $this->check_payment_legacy($merchant_address, $memo, $expected_amount, $asset_code, $asset_issuer, $since_cursor);
+    }
+
+
+    private function check_payment_legacy($merchant_address, $memo, $expected_amount, $asset_code = 'REAL8', $asset_issuer = null, $since_cursor = null) {
         // Query Stellar Horizon for payments to this address
         $url = REAL8_GW_HORIZON_URL . '/accounts/' . $merchant_address . '/payments';
         $params = array(
@@ -407,14 +686,14 @@ class REAL8_Stellar_Payment_API {
                 continue;
             }
 
-            // Check amount (allow small difference for rounding)
-            $received_amount = (float) $payment['amount'];
-            $tolerance = 0.0000001; // 1 stroop tolerance
+            // Check amount against minimum acceptable (expected minus configured tolerance)
+            $min_expected = $this->min_expected_with_tolerance($expected_amount, 7);
+            $candidate_plus = $this->dec_add_tol((string) $payment['amount'], '0.000001', 7);
 
-            if ($received_amount >= ($expected_amount - $tolerance)) {
+            if ($this->dec_compare($candidate_plus, $min_expected, 7) >= 0) {
                 return array(
                     'tx_hash' => $tx_hash,
-                    'amount' => $received_amount,
+                    'amount' => (float) $payment['amount'],
                     'from' => $payment['from'],
                     'created_at' => $payment['created_at'],
                     'paging_token' => $payment['paging_token'],
