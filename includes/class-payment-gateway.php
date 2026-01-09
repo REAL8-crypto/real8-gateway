@@ -179,6 +179,16 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
                 'default'     => (string) get_option('real8_gateway_amount_tolerance_min', '0.0000001'),
                 'desc_tip'    => true,
             ),
+
+            // Shop price display
+            'show_shop_prices' => array(
+                'title'       => __('Mostrar precios REAL8 en tienda', 'real8-gateway'),
+                'type'        => 'checkbox',
+                'label'       => __('Mostrar equivalente en REAL8 junto a los precios USD', 'real8-gateway'),
+                'description' => __('Display REAL8 token equivalents below product prices throughout the shop.', 'real8-gateway'),
+                'default'     => 'yes',
+                'desc_tip'    => true,
+            ),
         );
     }
 
@@ -193,6 +203,10 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
         $m = (string) $this->get_option('amount_tolerance_min', '0.0000001');
         update_option('real8_gateway_amount_tolerance_percent', $p);
         update_option('real8_gateway_amount_tolerance_min', $m);
+
+        // Mirror shop prices setting for the price display class
+        $show_prices = $this->get_option('show_shop_prices', 'yes');
+        update_option('real8_show_shop_prices', $show_prices);
 
         return $saved;
     }
@@ -369,13 +383,17 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
      */
     public function process_payment($order_id) {
         $order = wc_get_order($order_id);
-        // If guest, require a valid order_key to avoid order enumeration
-        if ($order && !is_user_logged_in()) {
+
+        // If guest on order-pay page, validate order_key to prevent order enumeration
+        $order_key = isset($_REQUEST['key']) ? sanitize_text_field(wp_unslash($_REQUEST['key'])) : '';
+        if ($order && !is_user_logged_in() && is_wc_endpoint_url('order-pay')) {
             $real_key = $order->get_order_key();
             if (!$order_key || !hash_equals($real_key, $order_key)) {
-                wp_send_json_error(array('message' => 'Invalid order'), 403);
+                wc_add_notice(__('Invalid order access.', 'real8-gateway'), 'error');
+                return array('result' => 'fail');
             }
         }
+
         global $wpdb;
         $table = $wpdb->prefix . 'real8_payments';
 

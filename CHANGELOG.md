@@ -5,6 +5,18 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.9] - 2026-01-09
+
+### Added
+- **REAL8 prices throughout the shop** - Product prices now display REAL8 token equivalents below USD prices on shop pages, product pages, and cart
+- **Admin toggle** - New setting "Mostrar precios REAL8 en tienda" to enable/disable shop price display
+- **New class `REAL8_Price_Display`** - Handles dual-currency price display using existing pricing API
+
+### Fixed
+- **Undefined `$order_key` bug** in `process_payment()` - Added proper variable definition and validation for order-pay page security
+
+---
+
 ## [3.0.8.1] - 2026-01-04
 
 ### Fixed
