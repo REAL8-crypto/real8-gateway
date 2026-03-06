@@ -5,6 +5,26 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.0] - 2026-03-06
+
+### Changed
+- **REAL8-only payments** - Removed multi-token selector; REAL8 is now the only accepted payment token, simplifying both frontend and backend
+- **Deep-link integration with app.real8.org** - "Pay with REAL8 Wallet" button on checkout with pre-filled amount, address, and memo
+- **QR code** on payment instructions page for easy mobile scanning
+- **All strings now English-first** - Removed hardcoded Spanish strings from source; Spanish translations provided via `.po`/`.mo` files
+- **Updated admin labels** - "Pay with REAL8" (was "Pay with Stellar"), clean descriptions
+
+### Added
+- **GitHub auto-updater** - Plugin checks GitHub Releases for updates and supports one-click update from WP admin
+- **Plugin branding** - Icons (128×128, 256×256) and banners (772×250, 1544×500) for WP plugin screens
+
+### Removed
+- Multi-token selector UI (radio buttons for XLM, USDC, EURC, SLVR, GOLD)
+- `accepted_tokens` admin setting
+- Token selector inline CSS
+
+---
+
 ## [3.0.9] - 2026-01-09
 
 ### Added

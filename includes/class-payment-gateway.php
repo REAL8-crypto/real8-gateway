@@ -1,11 +1,11 @@
 <?php
 /**
- * WooCommerce Stellar Payment Gateway
+ * WooCommerce REAL8 Payment Gateway
  *
- * Multi-token payment gateway supporting XLM, REAL8, wREAL8, USDC, EURC, SLVR, GOLD
+ * Accept REAL8 token payments on the Stellar blockchain.
  *
  * @package REAL8_Gateway
- * @version 3.0.0
+ * @version 4.1.0
  */
 
 if (!defined('ABSPATH')) {
@@ -36,9 +36,9 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
     public function __construct() {
         $this->id = 'real8_payment';
         $this->icon = '';
-        $this->has_fields = true; // Enable payment fields for token selector
+        $this->has_fields = false;
         $this->method_title = __('REAL8 Payments', 'real8-gateway');
-        $this->method_description = __('Accept payments in Stellar tokens (XLM, REAL8, USDC, EURC, SLVR, GOLD)', 'real8-gateway');
+        $this->method_description = __('Accept REAL8 token payments on the Stellar blockchain', 'real8-gateway');
 
         // Supported features
         $this->supports = array(
@@ -54,7 +54,6 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
         $this->description = $this->get_option('description');
         $this->enabled = $this->get_option('enabled');
         $this->merchant_address = $this->get_option('merchant_address');
-        $this->accepted_tokens = $this->get_option('accepted_tokens', array('REAL8'));
         $this->payment_timeout = $this->get_option('payment_timeout', REAL8_GW_PAYMENT_TIMEOUT_MINUTES);
         $this->price_buffer = $this->get_option('price_buffer', REAL8_GW_PRICE_BUFFER_PERCENT);
 
@@ -67,11 +66,6 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
             'amount_tolerance_min',
             (string) get_option('real8_gateway_amount_tolerance_min', '0.0000001')
         );
-
-        // Ensure accepted_tokens is an array
-        if (!is_array($this->accepted_tokens)) {
-            $this->accepted_tokens = array($this->accepted_tokens);
-        }
 
         // Initialize Stellar API
         $this->stellar_api = REAL8_Stellar_Payment_API::get_instance();
@@ -99,34 +93,22 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
             'enabled' => array(
                 'title' => __('Enable/Disable', 'real8-gateway'),
                 'type' => 'checkbox',
-                'label' => __('Habilitar Pagos REAL8 / Stellar', 'real8-gateway'),
+                'label' => __('Enable REAL8 Payments', 'real8-gateway'),
                 'default' => 'no',
             ),
             'title' => array(
                 'title' => __('Title', 'real8-gateway'),
                 'type' => 'text',
                 'description' => __('Payment method title displayed to customers', 'real8-gateway'),
-                'default' => __('Pay with Stellar', 'real8-gateway'),
+                'default' => __('Pay with REAL8', 'real8-gateway'),
                 'desc_tip' => true,
             ),
             'description' => array(
                 'title' => __('Description', 'real8-gateway'),
                 'type' => 'textarea',
                 'description' => __('Payment method description displayed during checkout', 'real8-gateway'),
-                'default' => __('Pay with Stellar tokens (XLM, REAL8, USDC, EURC, SLVR, GOLD). Fast, secure, and low fees.', 'real8-gateway'),
+                'default' => __('Pay with REAL8. Fast, secure, and low fees.', 'real8-gateway'),
                 'desc_tip' => true,
-            ),
-            'accepted_tokens' => array(
-                'title' => __('Criptomonedas aceptadas', 'real8-gateway'),
-                'type' => 'multiselect',
-                'class' => 'wc-enhanced-select',
-                'description' => __('Select which Stellar tokens to accept as payment. You must have trustlines for non-XLM tokens.', 'real8-gateway'),
-                'options' => REAL8_Token_Registry::get_token_options(),
-                'default' => array('REAL8'),
-                'desc_tip' => true,
-                'custom_attributes' => array(
-                    'data-placeholder' => __('Select tokens...', 'real8-gateway'),
-                ),
             ),
             'merchant_address' => array(
                 'title' => __('Your Stellar Public Key', 'real8-gateway'),
@@ -182,9 +164,9 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
 
             // Shop price display
             'show_shop_prices' => array(
-                'title'       => __('Mostrar precios REAL8 en tienda', 'real8-gateway'),
+                'title'       => __('Show REAL8 prices in shop', 'real8-gateway'),
                 'type'        => 'checkbox',
-                'label'       => __('Mostrar equivalente en REAL8 junto a los precios USD', 'real8-gateway'),
+                'label'       => __('Show REAL8 equivalent next to USD prices', 'real8-gateway'),
                 'description' => __('Display REAL8 token equivalents below product prices throughout the shop.', 'real8-gateway'),
                 'default'     => 'yes',
                 'desc_tip'    => true,
@@ -241,140 +223,22 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
             return false;
         }
 
-        if (empty($this->accepted_tokens)) {
-            return false;
-        }
-
         return true;
     }
 
     /**
-     * Display payment fields at checkout (token selector)
+     * Display payment description at checkout
      */
     public function payment_fields() {
-        // Show description
         if ($this->description) {
             echo '<p>' . wp_kses_post($this->description) . '</p>';
         }
-
-        // Get prices for enabled tokens
-        $prices = $this->stellar_api->get_all_token_prices($this->accepted_tokens);
-        $cart_total = WC()->cart ? WC()->cart->get_total('edit') : 0;
-
-        echo '<div class="stellar-token-selector" id="stellar-token-selector">';
-        echo '<p class="form-row form-row-wide">';
-        echo '<label>' . esc_html__('Select Payment Token', 'real8-gateway') . ' <span class="required">*</span></label>';
-        echo '</p>';
-
-        echo '<div class="stellar-token-options">';
-
-        $first = true;
-        foreach ($this->accepted_tokens as $token_code) {
-            $token = REAL8_Token_Registry::get_token($token_code);
-            if (!$token) continue;
-
-            $price = isset($prices[$token_code]) ? $prices[$token_code] : null;
-            $amount = ($price && $cart_total > 0) ? round($cart_total / $price, 7) : null;
-
-            $checked = $first ? 'checked' : '';
-            $first = false;
-
-            echo '<label class="stellar-token-option' . ($checked ? ' selected' : '') . '">';
-            echo '<input type="radio" name="stellar_selected_token" value="' . esc_attr($token_code) . '" ' . $checked . ' required />';
-            echo '<span class="stellar-token-info">';
-            echo '<span class="stellar-token-name" style="color: ' . esc_attr($token['color']) . ';">' . esc_html($token_code) . '</span>';
-            echo '<span class="stellar-token-fullname">' . esc_html($token['name']) . '</span>';
-            if ($amount !== null) {
-                echo '<span class="stellar-token-amount">~' . esc_html(number_format($amount, 4)) . ' ' . esc_html($token_code) . '</span>';
-            }
-            echo '</span>';
-            echo '</label>';
-        }
-
-        echo '</div>';
-
-        // Hidden field for order total (for JS calculations)
-        echo '<input type="hidden" id="stellar-cart-total" value="' . esc_attr($cart_total) . '" />';
-
-        echo '</div>';
-
-        // Add inline styles for token selector
-        $this->output_token_selector_styles();
-    }
-
-    /**
-     * Output inline styles for token selector
-     */
-    private function output_token_selector_styles() {
-        ?>
-        <style>
-        .stellar-token-options {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-top: 10px;
-        }
-        .stellar-token-option {
-            display: flex;
-            align-items: center;
-            padding: 12px 16px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            background: #fff;
-            flex: 1;
-            min-width: 140px;
-        }
-        .stellar-token-option:hover {
-            border-color: #007cba;
-            background: #f8f9fa;
-        }
-        .stellar-token-option.selected,
-        .stellar-token-option:has(input:checked) {
-            border-color: #007cba;
-            background: #e8f4fc;
-        }
-        .stellar-token-option input[type="radio"] {
-            margin-right: 10px;
-        }
-        .stellar-token-info {
-            display: flex;
-            flex-direction: column;
-        }
-        .stellar-token-name {
-            font-weight: bold;
-            font-size: 1.1em;
-        }
-        .stellar-token-fullname {
-            font-size: 0.85em;
-            color: #666;
-        }
-        .stellar-token-amount {
-            font-size: 0.9em;
-            color: #007cba;
-            margin-top: 4px;
-        }
-        </style>
-        <?php
     }
 
     /**
      * Validate payment fields
      */
     public function validate_fields() {
-        if (empty($_POST['stellar_selected_token'])) {
-            wc_add_notice(__('Please select a payment token.', 'real8-gateway'), 'error');
-            return false;
-        }
-
-        $selected_token = sanitize_text_field($_POST['stellar_selected_token']);
-
-        if (!in_array($selected_token, $this->accepted_tokens)) {
-            wc_add_notice(__('Invalid payment token selected.', 'real8-gateway'), 'error');
-            return false;
-        }
-
         return true;
     }
 
@@ -397,16 +261,8 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
         global $wpdb;
         $table = $wpdb->prefix . 'real8_payments';
 
-        // Get selected token
-        $selected_token = isset($_POST['stellar_selected_token'])
-            ? sanitize_text_field($_POST['stellar_selected_token'])
-            : 'REAL8';
-
-        // Validate token is enabled
-        if (!in_array($selected_token, $this->accepted_tokens)) {
-            wc_add_notice(__('Invalid payment token.', 'real8-gateway'), 'error');
-            return array('result' => 'fail');
-        }
+        // REAL8 is the only accepted token
+        $selected_token = 'REAL8';
 
         // Get token details
         $token = REAL8_Token_Registry::get_token($selected_token);
@@ -653,15 +509,15 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
                 'order_key' => isset($_GET['key']) ? wc_clean(wp_unslash($_GET['key'])) : '',
                 'nonce' => wp_create_nonce('stellar_gateway_nonce'),
                 'check_interval' => 15000,
-                'accepted_tokens' => $this->accepted_tokens,
+                'accepted_tokens' => array('REAL8'),
                 'strings' => array(
                     'checking' => __('Checking payment status...', 'real8-gateway'),
                     'paid' => __('Payment received! Redirecting...', 'real8-gateway'),
                     'expired' => __('Payment window expired', 'real8-gateway'),
                     'error' => __('Error checking payment', 'real8-gateway'),
-                    'manual_check' => __('Comprobar pago ahora', 'real8-gateway'),
-                    'manual_checking' => __('Comprobando ahora...', 'real8-gateway'),
-                    'manual_checked' => __('Verificación completada.', 'real8-gateway'),
+                    'manual_check' => __('Check payment now', 'real8-gateway'),
+                    'manual_checking' => __('Checking now...', 'real8-gateway'),
+                    'manual_checked' => __('Verification complete.', 'real8-gateway'),
                 ),
             ));
         }
@@ -787,7 +643,7 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
             wp_send_json_error(array('message' => 'Invalid nonce'), 403);
         }
 
-        $tokens = isset($_REQUEST['tokens']) ? array_map('sanitize_text_field', (array) $_POST['tokens']) : $this->accepted_tokens;
+        $tokens = isset($_REQUEST['tokens']) ? array_map('sanitize_text_field', (array) $_POST['tokens']) : array('REAL8');
         $prices = $this->stellar_api->get_all_token_prices($tokens);
 
         wp_send_json_success(array(
@@ -1044,7 +900,7 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
 
         // Token trustlines
         $html .= '<div class="stellar-trustlines" style="margin-top: 10px;">';
-        $html .= '<strong>' . esc_html__('Lineas de Confianza:', 'real8-gateway') . '</strong>';
+        $html .= '<strong>' . esc_html__('Trustlines:', 'real8-gateway') . '</strong>';
         $html .= '<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;">';
 
         foreach (REAL8_Token_Registry::get_all_tokens() as $token_code => $token) {
@@ -1074,7 +930,7 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
         // Count enabled tokens with trustlines
         $enabled_ok = 0;
         $enabled_missing = 0;
-        foreach ($this->accepted_tokens as $token_code) {
+        foreach (array('REAL8') as $token_code) {
             if (isset($status['token_trustlines'][$token_code])) {
                 if ($status['token_trustlines'][$token_code]['has_trustline']) {
                     $enabled_ok++;
@@ -1088,7 +944,7 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
         if ($enabled_missing === 0 && $status['xlm_balance'] >= 1.5) {
             $html .= '<div class="stellar-status-box stellar-status-success" style="margin-top: 10px;">
                 <span class="dashicons dashicons-yes-alt"></span>
-                <span><strong>' . esc_html__('Cuenta preparada para recibir Pagos REAL8 / Stellar', 'real8-gateway') . '</strong></span>
+                <span><strong>' . esc_html__('Account ready to receive REAL8 payments', 'real8-gateway') . '</strong></span>
             </div>';
         } elseif ($enabled_missing > 0) {
             $html .= '<div class="stellar-status-box stellar-status-warning" style="margin-top: 10px;">

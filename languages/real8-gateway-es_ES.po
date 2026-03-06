@@ -3,10 +3,10 @@
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: REAL8 Gateway for WooCommerce 2.0.0\n"
+"Project-Id-Version: REAL8 Gateway for WooCommerce 4.1.0\n"
 "Report-Msgid-Bugs-To: https://github.com/REAL8-crypto/real8-gateway/issues\n"
-"POT-Creation-Date: 2025-12-29 22:00+0000\n"
-"PO-Revision-Date: 2025-12-29 22:00+0000\n"
+"POT-Creation-Date: 2026-03-06 12:00+0000\n"
+"PO-Revision-Date: 2026-03-06 12:00+0000\n"
 "Last-Translator: REAL8 <info@real8.org>\n"
 "Language-Team: Spanish <es@li.org>\n"
 "Language: es_ES\n"
@@ -31,41 +31,41 @@ msgstr "Cada minuto"
 msgid "REAL8 Payment"
 msgstr "Pago con REAL8"
 
-#: includes/class-payment-gateway.php:30
-msgid "Accept payments in REAL8 tokens on the Stellar network"
-msgstr "Acepta pagos en tokens REAL8 en la red Stellar"
+#: includes/class-payment-gateway.php:41
+msgid "Accept REAL8 token payments on the Stellar blockchain"
+msgstr "Acepta pagos con REAL8 en la blockchain Stellar"
 
-#: includes/class-payment-gateway.php:72
+#: includes/class-payment-gateway.php:94
 msgid "Enable/Disable"
 msgstr "Activar/Desactivar"
 
-#: includes/class-payment-gateway.php:74
-msgid "Enable REAL8 Payment"
-msgstr "Activar pago con REAL8"
+#: includes/class-payment-gateway.php:96
+msgid "Enable REAL8 Payments"
+msgstr "Habilitar Pagos REAL8"
 
-#: includes/class-payment-gateway.php:78
+#: includes/class-payment-gateway.php:100
 msgid "Title"
 msgstr "Título"
 
-#: includes/class-payment-gateway.php:80
+#: includes/class-payment-gateway.php:102
 msgid "Payment method title displayed to customers"
 msgstr "Título del método de pago mostrado a los clientes"
 
-#: includes/class-payment-gateway.php:81
-msgid "Payment with REAL8"
-msgstr "Pago con REAL8"
+#: includes/class-payment-gateway.php:103
+msgid "Pay with REAL8"
+msgstr "Pagar con REAL8"
 
-#: includes/class-payment-gateway.php:85
+#: includes/class-payment-gateway.php:107
 msgid "Description"
 msgstr "Descripción"
 
-#: includes/class-payment-gateway.php:87
+#: includes/class-payment-gateway.php:109
 msgid "Payment method description displayed during checkout"
 msgstr "Descripción del método de pago mostrada durante el proceso de compra"
 
-#: includes/class-payment-gateway.php:88
-msgid "Pay with REAL8 through the Stellar network. Fast, secure, and with very low fees."
-msgstr "Pague con REAL8 en la red Stellar."
+#: includes/class-payment-gateway.php:110
+msgid "Pay with REAL8. Fast, secure, and low fees."
+msgstr "Paga con REAL8. Rápido, seguro y con bajas comisiones."
 
 #: includes/class-payment-gateway.php:92
 msgid "Your Stellar Public Key"
@@ -335,3 +335,43 @@ msgstr "Este pago ha expirado"
 #: includes/class-payment-monitor.php:268
 msgid "Merchant address not configured"
 msgstr "Dirección del comerciante no configurada"
+
+#: includes/class-payment-gateway.php
+msgid "Show REAL8 prices in shop"
+msgstr "Mostrar precios REAL8 en tienda"
+
+#: includes/class-payment-gateway.php
+msgid "Show REAL8 equivalent next to USD prices"
+msgstr "Mostrar equivalente en REAL8 junto a los precios USD"
+
+#: includes/class-payment-gateway.php
+msgid "Check payment now"
+msgstr "Comprobar pago ahora"
+
+#: includes/class-payment-gateway.php
+msgid "Checking now..."
+msgstr "Comprobando ahora..."
+
+#: includes/class-payment-gateway.php
+msgid "Verification complete."
+msgstr "Verificación completada."
+
+#: includes/class-payment-gateway.php
+msgid "Account ready to receive REAL8 payments"
+msgstr "Cuenta preparada para recibir pagos REAL8"
+
+#: includes/class-payment-gateway.php
+msgid "Trustlines:"
+msgstr "Líneas de confianza:"
+
+#: includes/templates/payment-instructions.php
+msgid "If you already paid, click to force verification."
+msgstr "Si ya pagaste, haz clic para forzar la verificación."
+
+#: includes/class-payment-gateway.php
+msgid "Underpayment Tolerance (%)"
+msgstr "Tolerancia de pago insuficiente (%)"
+
+#: includes/class-payment-gateway.php
+msgid "Minimum Tolerance (token units)"
+msgstr "Tolerancia mínima (unidades del token)"
