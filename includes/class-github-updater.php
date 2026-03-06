@@ -32,9 +32,8 @@ class REAL8_GitHub_Updater {
         add_filter('plugins_api', [$this, 'plugin_info'], 10, 3);
         add_action('upgrader_process_complete', [$this, 'clear_cache'], 10, 2);
 
-        // Clear stale cache when plugin version changes (e.g. manual zip upload)
-        $cached = get_transient(self::CACHE_KEY);
-        if ($cached && !empty($cached['version']) && version_compare(REAL8_GATEWAY_VERSION, $cached['version'], '>=')) {
+        // Clear our cache when WordPress does a force-check
+        if (is_admin() && isset($_GET['force-check'])) {
             delete_transient(self::CACHE_KEY);
         }
     }
@@ -166,10 +165,13 @@ class REAL8_GitHub_Updater {
         ]);
 
         if (is_wp_error($response)) {
+            error_log('[REAL8 Updater] wp_remote_get error: ' . $response->get_error_message());
             return false;
         }
 
-        if (wp_remote_retrieve_response_code($response) !== 200) {
+        $http_code = wp_remote_retrieve_response_code($response);
+        if ($http_code !== 200) {
+            error_log('[REAL8 Updater] GitHub API returned HTTP ' . $http_code);
             return false;
         }
 
