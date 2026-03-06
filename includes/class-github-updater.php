@@ -18,6 +18,7 @@ class REAL8_GitHub_Updater {
     const REPO       = 'REAL8-crypto/real8-gateway';
     const CACHE_KEY  = 'real8_gateway_update_data';
     const CACHE_EXPIRY = 43200; // 12 hours
+    const ASSETS_URL = 'https://raw.githubusercontent.com/REAL8-crypto/real8-gateway/main/assets/images/';
 
     /**
      * Plugin basename (e.g. real8-gateway/real8-gateway.php)
@@ -58,6 +59,14 @@ class REAL8_GitHub_Updater {
                 'tested'       => $remote['tested'] ?? '',
                 'requires_php' => $remote['requires_php'] ?? '7.4',
                 'requires'     => $remote['requires'] ?? '5.8',
+                'icons'        => [
+                    '1x' => self::ASSETS_URL . 'icon-128x128.png',
+                    '2x' => self::ASSETS_URL . 'icon-256x256.png',
+                ],
+                'banners'      => [
+                    'low'  => self::ASSETS_URL . 'banner-772x250.png',
+                    'high' => self::ASSETS_URL . 'banner-1544x500.png',
+                ],
             ];
         } else {
             // Tell WP we checked and it's up to date (prevents WP.org lookup)
@@ -104,6 +113,14 @@ class REAL8_GitHub_Updater {
             'sections'      => [
                 'description' => 'Accept REAL8 token payments on the Stellar blockchain for your WooCommerce store.',
                 'changelog'   => $remote['changelog'] ?? '',
+            ],
+            'icons'         => [
+                '1x' => self::ASSETS_URL . 'icon-128x128.png',
+                '2x' => self::ASSETS_URL . 'icon-256x256.png',
+            ],
+            'banners'       => [
+                'low'  => self::ASSETS_URL . 'banner-772x250.png',
+                'high' => self::ASSETS_URL . 'banner-1544x500.png',
             ],
         ];
     }
