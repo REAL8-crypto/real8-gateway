@@ -31,6 +31,12 @@ class REAL8_GitHub_Updater {
         add_filter('pre_set_site_transient_update_plugins', [$this, 'check_for_update']);
         add_filter('plugins_api', [$this, 'plugin_info'], 10, 3);
         add_action('upgrader_process_complete', [$this, 'clear_cache'], 10, 2);
+
+        // Clear stale cache when plugin version changes (e.g. manual zip upload)
+        $cached = get_transient(self::CACHE_KEY);
+        if ($cached && !empty($cached['version']) && version_compare(REAL8_GATEWAY_VERSION, $cached['version'], '>=')) {
+            delete_transient(self::CACHE_KEY);
+        }
     }
 
     /**
@@ -190,10 +196,21 @@ class REAL8_GitHub_Updater {
             }
         }
 
-        // Parse changelog from release body (markdown)
+        // Parse changelog from release body (markdown → HTML)
         $changelog = '';
         if (!empty($release['body'])) {
-            $changelog = '<pre>' . esc_html($release['body']) . '</pre>';
+            $body = esc_html($release['body']);
+            // Convert markdown headings
+            $body = preg_replace('/^### (.+)$/m', '<h4>$1</h4>', $body);
+            $body = preg_replace('/^## (.+)$/m', '<h3>$1</h3>', $body);
+            // Convert markdown bold
+            $body = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', $body);
+            // Convert markdown list items
+            $body = preg_replace('/^- (.+)$/m', '<li>$1</li>', $body);
+            $body = preg_replace('/(<li>.*<\/li>\n?)+/', '<ul>$0</ul>', $body);
+            // Convert line breaks
+            $body = nl2br($body);
+            $changelog = $body;
         }
 
         $data = [
