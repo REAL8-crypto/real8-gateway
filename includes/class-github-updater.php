@@ -1,9 +1,9 @@
 <?php
 /**
- * GitHub-based update checker for REAL8 Gateway
+ * Update checker for REAL8 Gateway
  *
  * Hooks into WordPress's native plugin update system to check for
- * new releases on GitHub and enable one-click updates.
+ * new releases via api.real8.org and enable one-click updates.
  *
  * @package REAL8_Gateway
  */
@@ -15,9 +15,9 @@ if (!defined('ABSPATH')) {
 class REAL8_GitHub_Updater {
 
     const SLUG       = 'real8-gateway';
-    const REPO       = 'REAL8-crypto/real8-gateway';
     const CACHE_KEY  = 'real8_gateway_update_data';
     const CACHE_EXPIRY = 43200; // 12 hours
+    const UPDATE_URL = 'https://api.real8.org/gateway/update-check';
     const ASSETS_URL = 'https://raw.githubusercontent.com/REAL8-crypto/real8-gateway/main/assets/images/';
 
     /**
@@ -39,7 +39,7 @@ class REAL8_GitHub_Updater {
     }
 
     /**
-     * Check GitHub for a newer release
+     * Check for a newer release
      */
     public function check_for_update($transient) {
         if (empty($transient->checked)) {
@@ -59,7 +59,7 @@ class REAL8_GitHub_Updater {
                 'slug'         => self::SLUG,
                 'plugin'       => $this->plugin_basename,
                 'new_version'  => $remote['version'],
-                'url'          => 'https://github.com/' . self::REPO,
+                'url'          => 'https://github.com/REAL8-crypto/real8-gateway',
                 'package'      => $remote['package'],
                 'tested'       => $remote['tested'] ?? '',
                 'requires_php' => $remote['requires_php'] ?? '7.4',
@@ -79,7 +79,7 @@ class REAL8_GitHub_Updater {
                 'slug'        => self::SLUG,
                 'plugin'      => $this->plugin_basename,
                 'new_version' => $current_version,
-                'url'         => 'https://github.com/' . self::REPO,
+                'url'         => 'https://github.com/REAL8-crypto/real8-gateway',
             ];
         }
 
@@ -104,12 +104,24 @@ class REAL8_GitHub_Updater {
             return $result;
         }
 
+        // Convert markdown changelog to HTML
+        $changelog = '';
+        if (!empty($remote['changelog'])) {
+            $body = esc_html($remote['changelog']);
+            $body = preg_replace('/^### (.+)$/m', '<h4>$1</h4>', $body);
+            $body = preg_replace('/^## (.+)$/m', '<h3>$1</h3>', $body);
+            $body = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', $body);
+            $body = preg_replace('/^- (.+)$/m', '<li>$1</li>', $body);
+            $body = preg_replace('/(<li>.*<\/li>\n?)+/', '<ul>$0</ul>', $body);
+            $changelog = nl2br($body);
+        }
+
         return (object) [
             'name'          => 'REAL8 Gateway for WooCommerce',
             'slug'          => self::SLUG,
             'version'       => $remote['version'],
             'author'        => '<a href="https://real8.org">REAL8</a>',
-            'homepage'      => 'https://github.com/' . self::REPO,
+            'homepage'      => 'https://github.com/REAL8-crypto/real8-gateway',
             'requires'      => $remote['requires'] ?? '5.8',
             'tested'        => $remote['tested'] ?? '',
             'requires_php'  => $remote['requires_php'] ?? '7.4',
@@ -117,7 +129,7 @@ class REAL8_GitHub_Updater {
             'download_link' => $remote['package'] ?? '',
             'sections'      => [
                 'description' => 'Accept REAL8 token payments on the Stellar blockchain for your WooCommerce store.',
-                'changelog'   => $remote['changelog'] ?? '',
+                'changelog'   => $changelog,
             ],
             'icons'         => [
                 '1x' => self::ASSETS_URL . 'icon-128x128.png',
@@ -144,7 +156,7 @@ class REAL8_GitHub_Updater {
     }
 
     /**
-     * Fetch latest release data from GitHub API (cached 12h)
+     * Fetch latest release data from api.real8.org (cached 12h)
      *
      * @return array|false
      */
@@ -154,76 +166,29 @@ class REAL8_GitHub_Updater {
             return $cached;
         }
 
-        $url = 'https://api.github.com/repos/' . self::REPO . '/releases/latest';
-
-        $response = wp_remote_get($url, [
+        $response = wp_remote_get(self::UPDATE_URL, [
             'timeout' => 15,
             'headers' => [
-                'Accept'     => 'application/vnd.github.v3+json',
-                'User-Agent' => 'REAL8-Gateway/' . REAL8_GATEWAY_VERSION . ' WordPress/' . get_bloginfo('version'),
+                'Accept' => 'application/json',
             ],
         ]);
 
         if (is_wp_error($response)) {
-            error_log('[REAL8 Updater] wp_remote_get error: ' . $response->get_error_message());
+            error_log('[REAL8 Updater] Request error: ' . $response->get_error_message());
             return false;
         }
 
         $http_code = wp_remote_retrieve_response_code($response);
         if ($http_code !== 200) {
-            error_log('[REAL8 Updater] GitHub API returned HTTP ' . $http_code);
+            error_log('[REAL8 Updater] API returned HTTP ' . $http_code);
             return false;
         }
 
-        $release = json_decode(wp_remote_retrieve_body($response), true);
+        $data = json_decode(wp_remote_retrieve_body($response), true);
 
-        if (!is_array($release) || empty($release['tag_name'])) {
+        if (!is_array($data) || empty($data['version'])) {
             return false;
         }
-
-        // Strip leading 'v' from tag (e.g. v3.1.0 → 3.1.0)
-        $version = ltrim($release['tag_name'], 'vV');
-
-        // Look for a .zip asset in release assets; fall back to source zipball
-        $package = $release['zipball_url'] ?? '';
-        if (!empty($release['assets'])) {
-            foreach ($release['assets'] as $asset) {
-                if (
-                    isset($asset['browser_download_url']) &&
-                    str_ends_with($asset['name'], '.zip')
-                ) {
-                    $package = $asset['browser_download_url'];
-                    break;
-                }
-            }
-        }
-
-        // Parse changelog from release body (markdown → HTML)
-        $changelog = '';
-        if (!empty($release['body'])) {
-            $body = esc_html($release['body']);
-            // Convert markdown headings
-            $body = preg_replace('/^### (.+)$/m', '<h4>$1</h4>', $body);
-            $body = preg_replace('/^## (.+)$/m', '<h3>$1</h3>', $body);
-            // Convert markdown bold
-            $body = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', $body);
-            // Convert markdown list items
-            $body = preg_replace('/^- (.+)$/m', '<li>$1</li>', $body);
-            $body = preg_replace('/(<li>.*<\/li>\n?)+/', '<ul>$0</ul>', $body);
-            // Convert line breaks
-            $body = nl2br($body);
-            $changelog = $body;
-        }
-
-        $data = [
-            'version'      => $version,
-            'package'      => $package,
-            'updated'      => $release['published_at'] ?? '',
-            'changelog'    => $changelog,
-            'requires'     => '5.8',
-            'requires_php' => '7.4',
-            'tested'       => '',
-        ];
 
         set_transient(self::CACHE_KEY, $data, self::CACHE_EXPIRY);
 

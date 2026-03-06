@@ -5,6 +5,14 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.0] - 2026-03-06
+
+### Changed
+- **Update checker now uses api.real8.org** - Plugin checks `api.real8.org/gateway/update-check` instead of GitHub API directly, eliminating rate limit issues (GitHub allows only 60 unauthenticated requests/hour per IP, which fails on shared hosting)
+- **Force-check works reliably** - "Check again" on WP Updates page clears the plugin's update cache
+
+---
+
 ## [4.1.3] - 2026-03-06
 
 ### Fixed
