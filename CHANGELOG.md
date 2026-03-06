@@ -5,6 +5,19 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.1] - 2026-03-06
+
+### Changed
+- **$REAL8 ticker** - All prices now display as `$REAL8` (product pages, cart, order details, payment instructions)
+- **Payment box full width** - Order received payment box now spans 100% instead of 600px
+- **Removed "Send Payment To:" heading** - Redundant label removed from payment instructions
+- **"REAL8 Total:" label** - Replaced "Monto en Stellar:" with proper English/Spanish translated label
+- **QR code fixed** - Updated CDN URL (old version returned 404)
+- **Pay/Cancel buttons** - Added spacing between buttons, white text on colored backgrounds
+- **All strings translatable** - Ensured every frontend string has Spanish translation
+
+---
+
 ## [4.2.0] - 2026-03-06
 
 ### Changed

@@ -5,7 +5,7 @@
  * Accept REAL8 token payments on the Stellar blockchain.
  *
  * @package REAL8_Gateway
- * @version 4.2.0
+ * @version 4.2.1
  */
 
 if (!defined('ABSPATH')) {

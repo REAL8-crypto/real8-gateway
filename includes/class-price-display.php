@@ -78,6 +78,15 @@ class REAL8_Price_Display {
         add_filter('woocommerce_cart_item_price', array($this, 'add_real8_to_cart_price'), 100, 3);
         add_filter('woocommerce_cart_item_subtotal', array($this, 'add_real8_to_subtotal'), 100, 3);
 
+        // Cart/checkout totals
+        add_filter('woocommerce_cart_total', array($this, 'add_real8_to_cart_total'), 100);
+
+        // Place Order button text with REAL8 equivalent
+        add_filter('woocommerce_order_button_text', array($this, 'add_real8_to_order_button'), 100);
+
+        // Remove "thank you" notice for pending REAL8 payments
+        add_filter('woocommerce_thankyou_order_received_text', array($this, 'filter_thankyou_text'), 10, 2);
+
         // Enqueue frontend styles
         add_action('wp_enqueue_scripts', array($this, 'enqueue_styles'));
     }
@@ -137,7 +146,7 @@ class REAL8_Price_Display {
         $real8_amount = $usd_amount / $real8_price;
         $formatted = $this->format_real8_amount($real8_amount);
 
-        return '<span class="real8-equivalent">&asymp; ' . esc_html($formatted) . ' REAL8</span>';
+        return '<span class="real8-equivalent">&asymp; ' . esc_html($formatted) . ' $REAL8</span>';
     }
 
     /**
@@ -172,7 +181,7 @@ class REAL8_Price_Display {
                     $min_real8 = $this->format_real8_amount($min_price / $real8_price);
                     $max_real8 = $this->format_real8_amount($max_price / $real8_price);
                     $real8_html = '<span class="real8-equivalent">&asymp; ' .
-                                  esc_html($min_real8) . ' - ' . esc_html($max_real8) . ' REAL8</span>';
+                                  esc_html($min_real8) . ' - ' . esc_html($max_real8) . ' $REAL8</span>';
                 } else {
                     $real8_html = '';
                 }
@@ -231,6 +240,61 @@ class REAL8_Price_Display {
         }
 
         return $subtotal_html . $real8_html;
+    }
+
+    /**
+     * Add REAL8 equivalent to cart total
+     */
+    public function add_real8_to_cart_total($total_html) {
+        $cart_total = WC()->cart ? WC()->cart->get_total('edit') : 0;
+        $real8_html = $this->get_real8_html($cart_total);
+
+        if (empty($real8_html)) {
+            return $total_html;
+        }
+
+        return $total_html . ' ' . $real8_html;
+    }
+
+    /**
+     * Add REAL8 equivalent to Place Order button
+     */
+    public function add_real8_to_order_button($text) {
+        if (!WC()->cart) {
+            return $text;
+        }
+
+        $cart_total = WC()->cart->get_total('edit');
+        $real8_price = $this->get_real8_price();
+
+        if (!$real8_price || $cart_total <= 0) {
+            return $text;
+        }
+
+        $real8_amount = $cart_total / $real8_price;
+        $formatted = $this->format_real8_amount($real8_amount);
+
+        return $text . ' / ' . $formatted . ' $REAL8';
+    }
+
+    /**
+     * Remove "thank you" message for pending REAL8 payments
+     */
+    public function filter_thankyou_text($text, $order) {
+        if (!$order || !is_a($order, 'WC_Order')) {
+            return $text;
+        }
+
+        if ($order->get_payment_method() !== 'real8_payment') {
+            return $text;
+        }
+
+        // Hide the message if payment is still pending
+        if ($order->has_status(array('pending', 'on-hold'))) {
+            return '';
+        }
+
+        return $text;
     }
 
     /**

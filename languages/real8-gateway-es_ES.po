@@ -3,7 +3,7 @@
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: REAL8 Gateway for WooCommerce 4.2.0\n"
+"Project-Id-Version: REAL8 Gateway for WooCommerce 4.2.1\n"
 "Report-Msgid-Bugs-To: https://github.com/REAL8-crypto/real8-gateway/issues\n"
 "POT-Creation-Date: 2026-03-06 12:00+0000\n"
 "PO-Revision-Date: 2026-03-06 12:00+0000\n"
@@ -299,8 +299,8 @@ msgstr "Verificando pago automáticamente..."
 
 #: includes/templates/payment-instructions.php:108
 #. translators: %1$s: order total, %2$s: REAL8 amount
-msgid "Order Total: %s (approximately %s REAL8 at current rate)"
-msgstr "Total del pedido: %s (aproximadamente %s REAL8 al tipo de cambio actual)"
+msgid "Order Total: %1$s (approximately %2$s $%3$s at current rate)"
+msgstr "Total del pedido: %1$s (aproximadamente %2$s $%3$s al tipo de cambio actual)"
 
 #: includes/class-payment-monitor.php:115
 msgid "REAL8 payment expired - no payment received within the time limit."
@@ -375,3 +375,23 @@ msgstr "Tolerancia de pago insuficiente (%)"
 #: includes/class-payment-gateway.php
 msgid "Minimum Tolerance (token units)"
 msgstr "Tolerancia mínima (unidades del token)"
+
+#: real8-gateway.php
+msgid "REAL8 Total:"
+msgstr "Total en REAL8:"
+
+#: includes/templates/payment-instructions.php
+msgid "Pay with REAL8 Wallet"
+msgstr "Pagar con REAL8 Wallet"
+
+#: includes/templates/payment-instructions.php
+msgid "Opens the REAL8 Wallet with payment details pre-filled. Just confirm and send."
+msgstr "Abre la REAL8 Wallet con los datos de pago prellenados. Solo confirma y envía."
+
+#: includes/templates/payment-instructions.php
+msgid "Scan with your phone to pay"
+msgstr "Escanea con tu teléfono para pagar"
+
+#: includes/templates/payment-instructions.php
+msgid "Or pay manually from any Stellar wallet"
+msgstr "O paga manualmente desde cualquier billetera Stellar"

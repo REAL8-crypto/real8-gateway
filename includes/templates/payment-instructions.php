@@ -3,10 +3,8 @@
  * Payment Instructions Template
  *
  * Displayed on thank-you page after order placement
- * Supports all Stellar tokens: XLM, REAL8, wREAL8, USDC, EURC, SLVR, GOLD
- *
  * @package REAL8_Gateway
- * @version 3.0.0
+ * @version 4.2.0
  */
 
 if (!defined('ABSPATH')) {
@@ -75,13 +73,11 @@ $is_native = $token_info ? $token_info['is_native'] : false;
         </div>
 
         <div class="real8-payment-details">
-            <h4><?php esc_html_e('Send Payment To:', 'real8-gateway'); ?></h4>
-
             <div class="real8-detail-row">
                 <label><?php esc_html_e('Amount:', 'real8-gateway'); ?></label>
                 <div class="real8-value real8-amount">
                     <strong style="color: <?php echo esc_attr($token_color); ?>;">
-                        <?php echo esc_html(number_format($amount, 7)); ?> <?php echo esc_html($asset_code); ?>
+                        <?php echo esc_html(number_format($amount, 7)); ?> $<?php echo esc_html($asset_code); ?>
                     </strong>
                     <button type="button" class="real8-copy-btn" data-copy="<?php echo esc_attr(number_format($amount, 7)); ?>" title="<?php esc_attr_e('Copy amount', 'real8-gateway'); ?>">
                         <span class="dashicons dashicons-admin-page"></span>
@@ -172,7 +168,7 @@ $is_native = $token_info ? $token_info['is_native'] : false;
                 <?php
                 printf(
                     /* translators: 1: order total, 2: token amount, 3: token code */
-                    esc_html__('Order Total: %1$s (approximately %2$s %3$s at current rate)', 'real8-gateway'),
+                    esc_html__('Order Total: %1$s (approximately %2$s $%3$s at current rate)', 'real8-gateway'),
                     wc_price($order->get_total()),
                     number_format($amount, 2),
                     esc_html($asset_code)
@@ -191,7 +187,8 @@ $is_native = $token_info ? $token_info['is_native'] : false;
     border-radius: 8px;
     padding: 25px;
     margin: 20px 0;
-    max-width: 600px;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .real8-payment-status {
@@ -239,12 +236,6 @@ $is_native = $token_info ? $token_info['is_native'] : false;
 .real8-timer {
     font-size: 1.1em;
     font-weight: 600;
-}
-
-.real8-payment-details h4 {
-    margin: 0 0 15px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid #eee;
 }
 
 .real8-detail-row {
@@ -437,6 +428,34 @@ $is_native = $token_info ? $token_info['is_native'] : false;
     color: #0052FF;
     font-weight: 600;
 }
+
+/* WooCommerce order actions buttons */
+.woocommerce-order-details .order-again .button,
+.woocommerce .order-actions .button,
+p.order-again .button {
+    margin-right: 8px;
+    color: #fff !important;
+    background: #0052FF;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+}
+
+p.order-again .button:hover,
+.woocommerce .order-actions .button:hover {
+    background: #003ecb;
+    color: #fff !important;
+}
+
+p.order-again .button + .button,
+.woocommerce .order-actions .button + .button {
+    background: #dc3545;
+}
+
+p.order-again .button + .button:hover,
+.woocommerce .order-actions .button + .button:hover {
+    background: #b02a37;
+}
 </style>
 
 <?php if ($status !== 'completed' && $status !== 'confirmed' && $status !== 'expired'): ?>
@@ -450,7 +469,7 @@ $is_native = $token_info ? $token_info['is_native'] : false;
 
     // Load QR library from CDN (lightweight, no npm needed)
     var s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js';
+    s.src = 'https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js';
     s.onload = function() {
         if (typeof QRCode !== 'undefined' && QRCode.toCanvas) {
             QRCode.toCanvas(canvas, url, { width: 180, margin: 2 }, function(err) {
