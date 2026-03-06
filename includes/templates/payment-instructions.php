@@ -429,32 +429,27 @@ $is_native = $token_info ? $token_info['is_native'] : false;
     font-weight: 600;
 }
 
-/* WooCommerce order actions buttons */
-.woocommerce-order-details .order-again .button,
-.woocommerce .order-actions .button,
-p.order-again .button {
-    margin-right: 8px;
+/* Hide "Pay" button on order-received (redundant — payment via wallet) */
+.woocommerce-order-details .order-actions-button.pay,
+.woocommerce-table--order-details .order-actions-button.pay,
+a.woocommerce-button.button.pay {
+    display: none !important;
+}
+
+/* Style "Cancel" button */
+.woocommerce-order-details .order-actions-button.cancel,
+.woocommerce-table--order-details .order-actions-button.cancel,
+a.woocommerce-button.button.cancel {
     color: #fff !important;
-    background: #0052FF;
+    background: #dc3545 !important;
     border: none;
     border-radius: 4px;
     padding: 8px 16px;
 }
 
-p.order-again .button:hover,
-.woocommerce .order-actions .button:hover {
-    background: #003ecb;
+a.woocommerce-button.button.cancel:hover {
+    background: #b02a37 !important;
     color: #fff !important;
-}
-
-p.order-again .button + .button,
-.woocommerce .order-actions .button + .button {
-    background: #dc3545;
-}
-
-p.order-again .button + .button:hover,
-.woocommerce .order-actions .button + .button:hover {
-    background: #b02a37;
 }
 </style>
 

@@ -87,6 +87,7 @@ class REAL8_Price_Display {
         // Remove "thank you" notice for pending REAL8 payments
         add_filter('woocommerce_thankyou_order_received_text', array($this, 'filter_thankyou_text'), 10, 2);
 
+
         // Enqueue frontend styles
         add_action('wp_enqueue_scripts', array($this, 'enqueue_styles'));
     }
