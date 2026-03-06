@@ -3,7 +3,7 @@
  * Plugin Name: REAL8 Gateway for WooCommerce
  * Plugin URI: https://real8.org
  * Description: Accept REAL8 token payments on the Stellar blockchain for WooCommerce orders
- * Version: 4.1.0
+ * Version: 4.1.1
  * Author: REAL8
  * Author URI: https://real8.org
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('REAL8_GATEWAY_VERSION', '4.1.0');
+define('REAL8_GATEWAY_VERSION', '4.1.1');
 define('REAL8_GATEWAY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('REAL8_GATEWAY_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('REAL8_GATEWAY_PLUGIN_FILE', __FILE__);
@@ -99,6 +99,50 @@ add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), 
             return;
         }
         $this->include_files();
+        $this->maybe_migrate_settings();
+    }
+
+    /**
+     * Migrate gateway settings from older versions.
+     * Runs once per upgrade by comparing stored version.
+     */
+    private function maybe_migrate_settings() {
+        $stored_version = get_option('real8_gateway_settings_version', '0');
+        if (version_compare($stored_version, '4.1.1', '>=')) {
+            return;
+        }
+
+        $settings = get_option('woocommerce_real8_payment_settings', array());
+        if (empty($settings)) {
+            update_option('real8_gateway_settings_version', REAL8_GATEWAY_VERSION);
+            return;
+        }
+
+        $changed = false;
+
+        // Migrate title: replace old Stellar references
+        if (!empty($settings['title']) && stripos($settings['title'], 'Stellar') !== false) {
+            $settings['title'] = 'Pay with REAL8';
+            $changed = true;
+        }
+
+        // Migrate description: replace old multi-token description
+        if (!empty($settings['description']) && stripos($settings['description'], 'Stellar tokens') !== false) {
+            $settings['description'] = 'Pay with REAL8. Fast, secure, and low fees.';
+            $changed = true;
+        }
+
+        // Remove accepted_tokens (no longer used)
+        if (isset($settings['accepted_tokens'])) {
+            unset($settings['accepted_tokens']);
+            $changed = true;
+        }
+
+        if ($changed) {
+            update_option('woocommerce_real8_payment_settings', $settings);
+        }
+
+        update_option('real8_gateway_settings_version', REAL8_GATEWAY_VERSION);
     }
 
     private function include_files() {
