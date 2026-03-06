@@ -109,10 +109,37 @@ $is_native = $token_info ? $token_info['is_native'] : false;
                 </div>
             </div>
 
-            <div class="real8-warning">
-                <strong>&#9888; <?php esc_html_e('IMPORTANT:', 'real8-gateway'); ?></strong>
-                <?php esc_html_e('You MUST include the memo exactly as shown above. Without the correct memo, your payment cannot be matched to your order.', 'real8-gateway'); ?>
+            <?php
+            // Build deep link to REAL8 Wallet app
+            $wallet_url = add_query_arg(array(
+                'wc_pay'    => $merchant,
+                'wc_amount' => number_format($amount, 7, '.', ''),
+                'wc_memo'   => $memo,
+                'wc_asset'  => $asset_code,
+            ), 'https://app.real8.org/');
+            ?>
+
+            <!-- Pay with REAL8 Wallet -->
+            <div class="real8-wallet-action">
+                <a href="<?php echo esc_url($wallet_url); ?>" class="real8-wallet-btn" target="_blank" rel="noopener noreferrer">
+                    <?php esc_html_e('Pay with REAL8 Wallet', 'real8-gateway'); ?>
+                </a>
+                <p class="real8-wallet-hint">
+                    <?php esc_html_e('Opens the REAL8 Wallet with payment details pre-filled. Just confirm and send.', 'real8-gateway'); ?>
+                </p>
+                <div class="real8-qr-wrap">
+                    <canvas id="real8-qr-canvas"></canvas>
+                    <p class="real8-qr-label"><?php esc_html_e('Scan with your phone to pay', 'real8-gateway'); ?></p>
+                </div>
             </div>
+
+            <details class="real8-manual-details">
+                <summary><?php esc_html_e('Or pay manually from any Stellar wallet', 'real8-gateway'); ?></summary>
+                <div class="real8-warning" style="margin-top: 12px;">
+                    <strong>&#9888; <?php esc_html_e('IMPORTANT:', 'real8-gateway'); ?></strong>
+                    <?php esc_html_e('You MUST include the memo exactly as shown above. Without the correct memo, your payment cannot be matched to your order.', 'real8-gateway'); ?>
+                </div>
+            </details>
 
             <div class="real8-asset-info">
                 <div class="real8-asset-header" style="border-left: 4px solid <?php echo esc_attr($token_color); ?>;">
@@ -350,4 +377,88 @@ $is_native = $token_info ? $token_info['is_native'] : false;
 .real8-copy-btn.copied {
     background: #28a745;
 }
+
+/* Pay with REAL8 Wallet */
+.real8-wallet-action {
+    text-align: center;
+    margin: 20px 0;
+    padding: 20px;
+    background: linear-gradient(135deg, #f0f7ff 0%, #e8f0fe 100%);
+    border: 1px solid #b6d4fe;
+    border-radius: 8px;
+}
+
+.real8-wallet-btn {
+    display: inline-block;
+    background: linear-gradient(135deg, #0052FF 0%, #00C2FF 100%);
+    color: #fff !important;
+    font-size: 1.15em;
+    font-weight: 700;
+    padding: 14px 32px;
+    border-radius: 8px;
+    text-decoration: none !important;
+    transition: opacity 0.2s;
+}
+
+.real8-wallet-btn:hover {
+    opacity: 0.9;
+    color: #fff !important;
+}
+
+.real8-wallet-hint {
+    margin: 10px 0 0;
+    font-size: 0.85em;
+    color: #555;
+}
+
+.real8-qr-wrap {
+    margin-top: 16px;
+}
+
+.real8-qr-wrap canvas {
+    display: block;
+    margin: 0 auto;
+    border-radius: 4px;
+}
+
+.real8-qr-label {
+    margin: 6px 0 0;
+    font-size: 0.8em;
+    color: #888;
+}
+
+.real8-manual-details {
+    margin: 16px 0 0;
+    font-size: 0.9em;
+}
+
+.real8-manual-details summary {
+    cursor: pointer;
+    color: #0052FF;
+    font-weight: 600;
+}
 </style>
+
+<?php if ($status !== 'completed' && $status !== 'confirmed' && $status !== 'expired'): ?>
+<script>
+(function(){
+    // Minimal QR code generator (alphanumeric mode, error correction L)
+    // Uses canvas to render a QR code for the wallet deep link URL
+    var url = <?php echo wp_json_encode($wallet_url); ?>;
+    var canvas = document.getElementById('real8-qr-canvas');
+    if (!canvas) return;
+
+    // Load QR library from CDN (lightweight, no npm needed)
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js';
+    s.onload = function() {
+        if (typeof QRCode !== 'undefined' && QRCode.toCanvas) {
+            QRCode.toCanvas(canvas, url, { width: 180, margin: 2 }, function(err) {
+                if (err) console.error('QR generation error:', err);
+            });
+        }
+    };
+    document.head.appendChild(s);
+})();
+</script>
+<?php endif; ?>

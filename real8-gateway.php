@@ -3,7 +3,7 @@
  * Plugin Name: REAL8 Gateway for WooCommerce
  * Plugin URI: https://real8.org
  * Description: Accept Stellar token payments (XLM, REAL8, USDC, EURC, SLVR, GOLD) for WooCommerce orders
-* Version: 3.0.9
+* Version: 4.0.0
  * Author: REAL8
  * Author URI: https://real8.org
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('REAL8_GATEWAY_VERSION', '3.0.9');
+define('REAL8_GATEWAY_VERSION', '4.0.0');
 define('REAL8_GATEWAY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('REAL8_GATEWAY_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('REAL8_GATEWAY_PLUGIN_FILE', __FILE__);
@@ -106,9 +106,13 @@ add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), 
         require_once REAL8_GATEWAY_PLUGIN_DIR . 'includes/class-payment-gateway.php';
         require_once REAL8_GATEWAY_PLUGIN_DIR . 'includes/class-payment-monitor.php';
         require_once REAL8_GATEWAY_PLUGIN_DIR . 'includes/class-price-display.php';
+        require_once REAL8_GATEWAY_PLUGIN_DIR . 'includes/class-github-updater.php';
 
         // Initialize price display for shop pages
         REAL8_Price_Display::get_instance();
+
+        // Initialize GitHub update checker
+        new REAL8_GitHub_Updater();
     }
 
     /**
