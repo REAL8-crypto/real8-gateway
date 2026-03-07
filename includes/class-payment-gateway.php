@@ -162,6 +162,15 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
                 'desc_tip'    => true,
             ),
 
+            // Payment Intent API (wallet deep-link)
+            'payment_intent_secret' => array(
+                'title'       => __('Payment Intent Secret', 'real8-gateway'),
+                'type'        => 'password',
+                'description' => __('HMAC shared secret for api.real8.org payment intents. When set, checkout redirects to the REAL8 Wallet app instead of showing the on-page payment instructions.', 'real8-gateway'),
+                'default'     => '',
+                'desc_tip'    => true,
+            ),
+
             // Shop price display
             'show_shop_prices' => array(
                 'title'       => __('Show REAL8 prices in shop', 'real8-gateway'),
@@ -379,11 +388,76 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
             WC()->cart->empty_cart();
         }
 
-        // Return success and redirect to thank you page
+        // Try payment intent redirect (wallet app deep-link)
+        $intent_redirect = $this->create_payment_intent($order, $token_amount, $memo, $selected_token, $token);
+        if ($intent_redirect) {
+            return array(
+                'result' => 'success',
+                'redirect' => $intent_redirect,
+            );
+        }
+
+        // Fallback: redirect to WooCommerce thank you page (legacy flow)
         return array(
             'result' => 'success',
             'redirect' => $this->get_return_url($order),
         );
+    }
+
+    /**
+     * Create a payment intent via api.real8.org and return the wallet redirect URL.
+     * Returns null on failure (caller falls back to legacy thank-you page).
+     */
+    private function create_payment_intent($order, $token_amount, $memo, $asset_code, $token) {
+        $secret = $this->get_option('payment_intent_secret', '');
+        if (empty($secret)) {
+            return null;
+        }
+
+        $body = wp_json_encode(array(
+            'order_id'        => $order->get_id(),
+            'amount_token'    => number_format((float) $token_amount, 7, '.', ''),
+            'amount_usd'      => number_format((float) $order->get_total(), 2, '.', ''),
+            'asset_code'      => $asset_code,
+            'asset_issuer'    => $token['issuer'] ?? '',
+            'destination'     => $this->merchant_address,
+            'memo'            => $memo,
+            'return_url'      => $this->get_return_url($order),
+            'expires_minutes' => (int) $this->payment_timeout,
+        ));
+
+        $signature = hash_hmac('sha256', $body, $secret);
+
+        $response = wp_remote_post('https://api.real8.org/payment-intents', array(
+            'headers' => array(
+                'Content-Type'      => 'application/json',
+                'X-REAL8-Signature' => $signature,
+            ),
+            'body'    => $body,
+            'timeout' => 10,
+        ));
+
+        if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 201) {
+            $err = is_wp_error($response) ? $response->get_error_message() : wp_remote_retrieve_body($response);
+            $order->add_order_note('Payment intent creation failed (using fallback): ' . $err);
+            return null;
+        }
+
+        $data = json_decode(wp_remote_retrieve_body($response), true);
+        if (empty($data['payment_url'])) {
+            return null;
+        }
+
+        $order->update_meta_data('_real8_intent_id', $data['intent_id']);
+        $order->save();
+
+        $order->add_order_note(sprintf(
+            'Payment intent created: %s (expires %s)',
+            $data['intent_id'],
+            $data['expires_at']
+        ));
+
+        return $data['payment_url'];
     }
 
     /**

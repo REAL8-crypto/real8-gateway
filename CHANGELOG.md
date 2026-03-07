@@ -5,6 +5,17 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.3.0] - 2026-03-07
+
+### Added
+- **Payment Intent architecture** - Checkout now creates a payment intent via `api.real8.org` and redirects to `app.real8.org/pay/{intent_id}` for a native wallet payment experience
+- **Smart landing page** - Payment URL detects PWA (standalone) vs browser: PWA shows payment dialog directly, browser shows "Open in REAL8 Wallet" with QR code
+- **Return URL handoff** - After payment, wallet redirects back to WooCommerce order-received page automatically
+- **Intent expiration** - Payment links expire based on the configured payment timeout
+- **HMAC authentication** - Plugin-to-API communication secured with HMAC-SHA256 signatures
+- **Graceful fallback** - If API is unreachable, falls back to the existing on-page payment instructions
+- **Payment Intent Secret** setting in gateway admin panel
+
 ## [4.2.2] - 2026-03-07
 
 ### Fixed
