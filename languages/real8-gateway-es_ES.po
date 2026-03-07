@@ -3,10 +3,10 @@
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: REAL8 Gateway for WooCommerce 4.2.1\n"
+"Project-Id-Version: REAL8 Gateway for WooCommerce 4.2.2\n"
 "Report-Msgid-Bugs-To: https://github.com/REAL8-crypto/real8-gateway/issues\n"
-"POT-Creation-Date: 2026-03-06 12:00+0000\n"
-"PO-Revision-Date: 2026-03-06 12:00+0000\n"
+"POT-Creation-Date: 2026-03-07 12:00+0000\n"
+"PO-Revision-Date: 2026-03-07 12:00+0000\n"
 "Last-Translator: REAL8 <info@real8.org>\n"
 "Language-Team: Spanish <es@li.org>\n"
 "Language: es_ES\n"
