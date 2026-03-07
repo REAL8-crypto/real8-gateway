@@ -5,6 +5,12 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.3.1] - 2026-03-07
+
+### Changed
+- **Payment intents work automatically** - HMAC secret is now built into the plugin; merchants don't need to configure anything. Payment intent flow activates on install/update with zero setup.
+- Removed Payment Intent Secret from admin settings (was unnecessary manual step)
+
 ## [4.3.0] - 2026-03-07
 
 ### Added

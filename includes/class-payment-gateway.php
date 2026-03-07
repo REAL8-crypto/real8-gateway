@@ -162,15 +162,6 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
                 'desc_tip'    => true,
             ),
 
-            // Payment Intent API (wallet deep-link)
-            'payment_intent_secret' => array(
-                'title'       => __('Payment Intent Secret', 'real8-gateway'),
-                'type'        => 'password',
-                'description' => __('HMAC shared secret for api.real8.org payment intents. When set, checkout redirects to the REAL8 Wallet app instead of showing the on-page payment instructions.', 'real8-gateway'),
-                'default'     => '',
-                'desc_tip'    => true,
-            ),
-
             // Shop price display
             'show_shop_prices' => array(
                 'title'       => __('Show REAL8 prices in shop', 'real8-gateway'),
@@ -409,7 +400,7 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
      * Returns null on failure (caller falls back to legacy thank-you page).
      */
     private function create_payment_intent($order, $token_amount, $memo, $asset_code, $token) {
-        $secret = $this->get_option('payment_intent_secret', '');
+        $secret = defined('REAL8_PAYMENT_INTENT_SECRET') ? REAL8_PAYMENT_INTENT_SECRET : '';
         if (empty($secret)) {
             return null;
         }
