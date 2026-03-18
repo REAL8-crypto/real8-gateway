@@ -5,7 +5,7 @@
  * Displays REAL8 token equivalents alongside USD prices throughout WooCommerce.
  *
  * @package REAL8_Gateway
- * @version 4.3.2
+ * @version 4.3.3
  */
 
 if (!defined('ABSPATH')) {
@@ -215,6 +215,10 @@ class REAL8_Price_Display {
      * @return string Modified price HTML
      */
     public function add_real8_to_cart_price($price_html, $cart_item, $cart_item_key) {
+        if (strpos($price_html, 'real8-equivalent') !== false) {
+            return $price_html;
+        }
+
         $product = $cart_item['data'];
         $price = $product->get_price();
 
@@ -236,6 +240,10 @@ class REAL8_Price_Display {
      * @return string Modified subtotal HTML
      */
     public function add_real8_to_subtotal($subtotal_html, $cart_item, $cart_item_key) {
+        if (strpos($subtotal_html, 'real8-equivalent') !== false) {
+            return $subtotal_html;
+        }
+
         $product = $cart_item['data'];
         $quantity = $cart_item['quantity'];
         $subtotal = $product->get_price() * $quantity;
@@ -253,6 +261,10 @@ class REAL8_Price_Display {
      * Add REAL8 equivalent to cart total
      */
     public function add_real8_to_cart_total($total_html) {
+        if (strpos($total_html, 'real8-equivalent') !== false) {
+            return $total_html;
+        }
+
         $cart_total = WC()->cart ? WC()->cart->get_total('edit') : 0;
         $real8_html = $this->get_real8_html($cart_total);
 
