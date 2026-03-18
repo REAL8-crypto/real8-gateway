@@ -5,7 +5,7 @@
  * Displays REAL8 token equivalents alongside USD prices throughout WooCommerce.
  *
  * @package REAL8_Gateway
- * @version 4.3.3
+ * @version 4.3.5
  */
 
 if (!defined('ABSPATH')) {
@@ -80,9 +80,6 @@ class REAL8_Price_Display {
 
         // Cart/checkout totals
         add_filter('woocommerce_cart_total', array($this, 'add_real8_to_cart_total'), 100);
-
-        // Place Order button text with REAL8 equivalent
-        add_filter('woocommerce_order_button_text', array($this, 'add_real8_to_order_button'), 100);
 
         // Remove "thank you" notice for pending REAL8 payments
         add_filter('woocommerce_thankyou_order_received_text', array($this, 'filter_thankyou_text'), 10, 2);
@@ -276,27 +273,6 @@ class REAL8_Price_Display {
     }
 
     /**
-     * Add REAL8 equivalent to Place Order button
-     */
-    public function add_real8_to_order_button($text) {
-        if (!WC()->cart) {
-            return $text;
-        }
-
-        $cart_total = WC()->cart->get_total('edit');
-        $real8_price = $this->get_real8_price();
-
-        if (!$real8_price || $cart_total <= 0) {
-            return $text;
-        }
-
-        $real8_amount = $cart_total / $real8_price;
-        $formatted = $this->format_real8_amount($real8_amount);
-
-        return $text . ' / ' . $formatted . ' $REAL8';
-    }
-
-    /**
      * Remove "thank you" message for pending REAL8 payments
      */
     public function filter_thankyou_text($text, $order) {
@@ -325,7 +301,7 @@ class REAL8_Price_Display {
         }
 
         // Only on shop-related pages
-        if (is_shop() || is_product() || is_product_category() || is_product_tag() || is_cart() || is_wc_endpoint_url()) {
+        if (is_shop() || is_product() || is_product_category() || is_product_tag() || is_cart() || is_checkout() || is_wc_endpoint_url()) {
             wp_add_inline_style('woocommerce-general', $this->get_inline_css());
         }
     }
@@ -340,6 +316,7 @@ class REAL8_Price_Display {
             .real8-equivalent {
                 display: block;
                 font-size: 0.85em;
+                font-weight: normal;
                 color: #e8491d;
                 opacity: 0.9;
                 margin-top: 2px;
