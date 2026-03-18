@@ -5,7 +5,7 @@
  * Displays REAL8 token equivalents alongside USD prices throughout WooCommerce.
  *
  * @package REAL8_Gateway
- * @version 3.0.9
+ * @version 4.3.2
  */
 
 if (!defined('ABSPATH')) {
@@ -165,6 +165,12 @@ class REAL8_Price_Display {
 
         // Skip on checkout page (has its own token selector)
         if (function_exists('is_checkout') && is_checkout()) {
+            return $price_html;
+        }
+
+        // Skip if REAL8 equivalent already present (avoids duplicates when
+        // subscription plugins re-apply the woocommerce_get_price_html filter)
+        if (strpos($price_html, 'real8-equivalent') !== false) {
             return $price_html;
         }
 
