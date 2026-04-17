@@ -5,6 +5,13 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.3.7] - 2026-04-17
+
+### Security
+- **Removed hardcoded HMAC fallback secret.** The previous `real8-gateway.php` contained a fallback `REAL8_PAYMENT_INTENT_SECRET` value that was committed to the public GitHub repository. Because the backend verified this same secret, anyone reading the repo could forge valid payment intents.
+- Plugin now requires `REAL8_PAYMENT_INTENT_SECRET` to be defined in `wp-config.php`. If missing, an error is logged and intent signing will fail (fail-closed).
+- **Action required on upgrade:** add `define('REAL8_PAYMENT_INTENT_SECRET', '<64-hex-secret>');` to `wp-config.php`, matching the `PAYMENT_INTENT_SECRET` in the `api.real8.org` `.env`. Rotate both simultaneously.
+
 ## [4.3.1] - 2026-03-07
 
 ### Changed
