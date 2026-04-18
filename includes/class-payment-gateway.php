@@ -141,16 +141,21 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
                 ),
             ),
 
-            // Amount tolerance (optional)
+            // Amount tolerance (optional). Hard-capped at 5% (M-wp-2): a
+            // larger tolerance lets customers systematically underpay, and
+            // rounding/fee drift is well under 1% in practice. The cap
+            // is also enforced on save in process_admin_options() and on
+            // read in class-stellar-payment-api.php so a direct
+            // update_option() call or a DB edit can't exceed it either.
             'amount_tolerance_percent' => array(
                 'title'       => __('Underpayment Tolerance (%)', 'real8-gateway'),
                 'type'        => 'number',
-                'description' => __('Allows a small underpayment (percentage of expected token amount) to avoid false negatives caused by rounding/fees. Set 0 to require the exact amount.', 'real8-gateway'),
+                'description' => __('Allows a small underpayment (percentage of expected token amount) to avoid false negatives caused by rounding/fees. Set 0 to require the exact amount. Hard-capped at 5% to prevent systematic underpayment.', 'real8-gateway'),
                 'default'     => (float) get_option('real8_gateway_amount_tolerance_percent', 1.0),
                 'desc_tip'    => true,
                 'custom_attributes' => array(
                     'min'  => 0,
-                    'max'  => 10,
+                    'max'  => 5,
                     'step' => '0.1',
                 ),
             ),
@@ -182,6 +187,9 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
 
         // Mirror into standalone options so the cron monitor can read them without depending on gateway settings load.
         $p = (float) $this->get_option('amount_tolerance_percent', 1.0);
+        // Clamp to [0, 5] (M-wp-2) — see field definition for rationale.
+        if ($p < 0)  $p = 0.0;
+        if ($p > 5)  $p = 5.0;
         $m = (string) $this->get_option('amount_tolerance_min', '0.0000001');
         update_option('real8_gateway_amount_tolerance_percent', $p);
         update_option('real8_gateway_amount_tolerance_min', $m);
@@ -305,28 +313,66 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
                 $expires_at
             ));
         } else {
-            // Calculate token amount fresh
+            // M-wp-1: lock the quoted token amount at the first attempt.
+            // Before we recalculate, check whether this order already has a
+            // locked quote in meta. The DB row can expire (payment_timeout)
+            // but the meta persists, so a customer who abandons checkout
+            // and returns later still pays the amount they were originally
+            // quoted — a REAL8 price drop doesn't shrink what the merchant
+            // receives. The lock itself has a hard ceiling so a quote
+            // can't be redeemed indefinitely.
+            // order_total is needed by both branches below and by the DB
+            // insert regardless of which branch runs — pull it once here.
             $order_total = $order->get_total();
-            $calculation = $this->stellar_api->calculate_token_amount($order_total, $selected_token, true);
 
-            if (is_wp_error($calculation)) {
-                wc_add_notice(__('Unable to calculate payment amount. Please try again.', 'real8-gateway'), 'error');
-                return array('result' => 'fail');
-            }
+            $hard_lock_seconds = (int) apply_filters('real8_payment_hard_lock_seconds', 24 * HOUR_IN_SECONDS);
+            $locked_amount = $order->get_meta('_stellar_payment_amount');
+            $locked_token  = $order->get_meta('_stellar_asset_code');
+            $locked_price  = $order->get_meta('_stellar_payment_price');
+            $locked_at     = (int) $order->get_meta('_stellar_payment_locked_at');
+            $lock_active = (
+                !empty($locked_amount)
+                && $locked_token === $selected_token
+                && $locked_at > 0
+                && ($locked_at + $hard_lock_seconds) > time()
+            );
 
-            // Check if we have an existing memo we should reuse (even if token changed)
-            $existing_memo = $order->get_meta('_stellar_payment_memo');
-            if (!empty($existing_memo)) {
-                $memo = $existing_memo;
-            } else {
-                // Generate unique memo
+            if ($lock_active) {
+                // Reuse the locked amount + price. Generate a fresh memo
+                // and expiry so the new on-chain payment is distinct.
+                $token_amount = (float) $locked_amount;
+                $token_price  = (float) $locked_price;
                 $memo = $this->stellar_api->generate_payment_memo($order_id);
-            }
+                $expires_at = gmdate('Y-m-d H:i:s', time() + ($this->payment_timeout * 60));
+                $order->add_order_note(sprintf(
+                    __('Reusing locked REAL8 quote from previous attempt: %1$s %2$s.', 'real8-gateway'),
+                    number_format($token_amount, 7),
+                    $selected_token
+                ));
+            } else {
+                // Calculate token amount fresh (first quote for this order
+                // or the previous lock has hard-expired).
+                $calculation = $this->stellar_api->calculate_token_amount($order_total, $selected_token, true);
 
-            // Calculate expiry time
-            $expires_at = gmdate('Y-m-d H:i:s', time() + ($this->payment_timeout * 60));
-            $token_amount = $calculation['token_amount'];
-            $token_price = $calculation['price_per_token'];
+                if (is_wp_error($calculation)) {
+                    wc_add_notice(__('Unable to calculate payment amount. Please try again.', 'real8-gateway'), 'error');
+                    return array('result' => 'fail');
+                }
+
+                // Calculate expiry time
+                $expires_at = gmdate('Y-m-d H:i:s', time() + ($this->payment_timeout * 60));
+                $token_amount = $calculation['token_amount'];
+                $token_price = $calculation['price_per_token'];
+
+                // Check if we have an existing memo we should reuse (even if token changed)
+                $existing_memo = $order->get_meta('_stellar_payment_memo');
+                if (!empty($existing_memo)) {
+                    $memo = $existing_memo;
+                } else {
+                    // Generate unique memo
+                    $memo = $this->stellar_api->generate_payment_memo($order_id);
+                }
+            }
 
             // Save payment record to database (replace any existing)
             $wpdb->replace($table, array(
@@ -362,6 +408,12 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
             $order->update_meta_data('_stellar_payment_price', $token_price);
             $order->update_meta_data('_stellar_payment_expires', $expires_at);
             $order->update_meta_data('_stellar_merchant_address', $this->merchant_address);
+            // Lock timestamp — first time only. M-wp-1 uses this alongside
+            // _stellar_payment_amount to keep the quote stable across
+            // expired-payment-row retries.
+            if (!(int) $order->get_meta('_stellar_payment_locked_at')) {
+                $order->update_meta_data('_stellar_payment_locked_at', time());
+            }
         }
 
         // Update order status to pending payment (if not already)

@@ -5,6 +5,12 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.4.0] - 2026-04-18
+
+### Security
+- **M-wp-1: Lock REAL8 token amount on first quote.** When a customer abandoned checkout and returned after the short payment timeout, the plugin would recalculate the token amount against the current REAL8/USD rate. If REAL8 had dropped, the customer paid fewer tokens than originally quoted — the merchant lost value on every price drop during a long-abandoned checkout. The plugin now writes a `_stellar_payment_locked_at` timestamp on the first quote and reuses the stored `_stellar_payment_amount` / `_stellar_payment_price` for the same order and token for 24 hours (filter: `real8_payment_hard_lock_seconds`). After the hard-lock window, a fresh quote replaces the lock.
+- **M-wp-2: Cap underpayment tolerance at 5%.** The "Underpayment Tolerance (%)" admin setting previously allowed values up to 10% via the HTML `max` attribute and had no server-side ceiling. A value set directly via `update_option()` or a DB edit could be arbitrarily high. The cap is now enforced in three places: the admin field (`max=5`), the settings save hook (`process_admin_options`), and on every read in `class-stellar-payment-api.php::get_amount_tolerance()`. An existing installation with `amount_tolerance_percent > 5` is clamped on the next admin save or payment verification.
+
 ## [4.3.7] - 2026-04-17
 
 ### Security

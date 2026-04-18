@@ -75,6 +75,11 @@ class REAL8_Stellar_Payment_API {
         $expected_amount = $this->normalize_dec($expected_amount, $scale);
 
         $percent = (float) get_option('real8_gateway_amount_tolerance_percent', 1.0);
+        // M-wp-2: clamp at read time too so a direct update_option() or
+        // a DB edit that bypassed the admin-page clamp still can't push
+        // us above the 5% hard cap.
+        if ($percent < 0) $percent = 0.0;
+        if ($percent > 5) $percent = 5.0;
         $min_abs = (string) get_option('real8_gateway_amount_tolerance_min', '0.0000001');
         $min_abs = $this->normalize_dec($min_abs, $scale);
 
