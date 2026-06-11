@@ -18,6 +18,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Plugin now requires `REAL8_PAYMENT_INTENT_SECRET` to be defined in `wp-config.php`. If missing, an error is logged and intent signing will fail (fail-closed).
 - **Action required on upgrade:** add `define('REAL8_PAYMENT_INTENT_SECRET', '<64-hex-secret>');` to `wp-config.php`, matching the `PAYMENT_INTENT_SECRET` in the `api.real8.org` `.env`. Rotate both simultaneously.
 
+## [4.3.6] - 2026-03-18
+
+### Added
+- REAL8 equivalents shown on subscription recurring totals at checkout
+
+## [4.3.5] - 2026-03-18
+
+### Fixed
+- Removed REAL8 amount from the order button
+- Fixed bold styling on the checkout total
+
+## [4.3.3] - 2026-03-18
+
+### Fixed
+- Duplicate REAL8 price in cart and subtotal columns
+
+## [4.3.2] - 2026-03-18
+
+### Fixed
+- Duplicate REAL8 price on subscription product pages
+
 ## [4.3.1] - 2026-03-07
 
 ### Changed
