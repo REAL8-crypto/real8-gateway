@@ -204,12 +204,49 @@ foreach ($pending as $payment) {
             $order->payment_complete($result['tx_hash']);
             $order->save();
 
+            // Report settlement back to the payment-intent API so a revisited
+            // pay link shows "paid" instead of pending/expired. Best-effort:
+            // a failure only logs, the order is already complete.
+            $this->notify_intent_paid($order, $result['tx_hash']);
+
             error_log(sprintf(
                 'REAL8 Gateway: %s payment confirmed for order #%d - TX: %s',
                 $asset_code,
                 $payment->order_id,
                 $result['tx_hash']
             ));
+        }
+    }
+
+    /**
+     * Notify api.real8.org that the payment intent for this order settled.
+     * Uses the same HMAC scheme as intent creation. Failures are logged only —
+     * the intent record is informational, the order state is authoritative.
+     *
+     * @param WC_Order $order   Order whose intent settled
+     * @param string   $tx_hash Stellar transaction hash
+     */
+    private function notify_intent_paid($order, $tx_hash) {
+        $intent_id = $order->get_meta('_real8_intent_id');
+        if (empty($intent_id) || !defined('REAL8_PAYMENT_INTENT_SECRET') || REAL8_PAYMENT_INTENT_SECRET === '') {
+            return;
+        }
+
+        $body = wp_json_encode(array('tx_hash' => strtolower((string) $tx_hash)));
+        $signature = hash_hmac('sha256', $body, REAL8_PAYMENT_INTENT_SECRET);
+
+        $response = wp_remote_post('https://api.real8.org/payment-intents/' . rawurlencode($intent_id) . '/paid', array(
+            'headers' => array(
+                'Content-Type'      => 'application/json',
+                'X-REAL8-Signature' => $signature,
+            ),
+            'body'    => $body,
+            'timeout' => 8,
+        ));
+
+        if (is_wp_error($response) || !in_array(wp_remote_retrieve_response_code($response), array(200, 409), true)) {
+            $err = is_wp_error($response) ? $response->get_error_message() : wp_remote_retrieve_body($response);
+            error_log(sprintf('REAL8 Gateway: failed to mark intent %s paid: %s', $intent_id, $err));
         }
     }
 

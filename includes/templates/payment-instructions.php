@@ -11,10 +11,11 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Variables available: $order, $memo, $amount, $expires, $merchant, $status, $asset_code, $asset_issuer
+// Variables available: $order, $memo, $amount, $expires, $merchant, $status, $asset_code, $asset_issuer, $sent_tx
 $expires_timestamp = strtotime($expires);
 $time_remaining = max(0, $expires_timestamp - time());
 $minutes_remaining = ceil($time_remaining / 60);
+$sent_tx = isset($sent_tx) ? $sent_tx : '';
 
 // Get token display info from registry
 $token_info = REAL8_Token_Registry::get_token($asset_code);
@@ -23,7 +24,7 @@ $token_color = $token_info ? $token_info['color'] : '#666666';
 $is_native = $token_info ? $token_info['is_native'] : false;
 ?>
 
-<div id="real8-payment-instructions" class="real8-payment-box" data-order-id="<?php echo esc_attr($order->get_id()); ?>" data-order-key="<?php echo esc_attr($order->get_order_key()); ?>" data-status="<?php echo esc_attr($status); ?>">
+<div id="real8-payment-instructions" class="real8-payment-box" data-order-id="<?php echo esc_attr($order->get_id()); ?>" data-order-key="<?php echo esc_attr($order->get_order_key()); ?>" data-status="<?php echo esc_attr($status); ?>" data-sent-tx="<?php echo esc_attr($sent_tx); ?>">
 
     <?php if ($status === 'completed' || $status === 'confirmed'): ?>
         <!-- Payment Confirmed -->
@@ -47,6 +48,36 @@ $is_native = $token_info ? $token_info['is_native'] : false;
             <span class="real8-status-icon">&#10060;</span>
             <h3><?php esc_html_e('Payment Expired', 'real8-gateway'); ?></h3>
             <p><?php esc_html_e('The payment window has expired. Please contact support if you made a payment.', 'real8-gateway'); ?></p>
+        </div>
+
+    <?php elseif ($sent_tx): ?>
+        <!-- Payment sent by the wallet — confirming on the network -->
+        <div class="real8-payment-status real8-status-sent">
+            <span class="real8-status-icon"><span class="real8-spinner real8-spinner-lg"></span></span>
+            <h3><?php esc_html_e('Payment Sent', 'real8-gateway'); ?></h3>
+            <p>
+                <?php
+                printf(
+                    /* translators: %s: token code (e.g., REAL8, XLM, USDC) */
+                    esc_html__('Your wallet reported the %s payment as sent. Confirming it on the Stellar network, this usually takes under a minute. This page updates automatically.', 'real8-gateway'),
+                    esc_html($asset_code)
+                );
+                ?>
+            </p>
+            <p class="real8-sent-tx">
+                <small><?php esc_html_e('Transaction:', 'real8-gateway'); ?> <code><?php echo esc_html(substr($sent_tx, 0, 8) . '…' . substr($sent_tx, -8)); ?></code></small>
+            </p>
+        </div>
+
+        <div class="real8-payment-footer">
+            <p class="real8-checking-status">
+                <span class="real8-spinner"></span>
+                <?php esc_html_e('Verifying payment on the network...', 'real8-gateway'); ?>
+            </p>
+            <div class="real8-manual-check-wrap">
+                <button type="button" class="button real8-manual-check-btn"><?php esc_html_e('Check payment now', 'real8-gateway'); ?></button>
+                <p class="real8-manual-check-msg" style="display:none"></p>
+            </div>
         </div>
 
     <?php else: ?>
@@ -211,6 +242,23 @@ $is_native = $token_info ? $token_info['is_native'] : false;
 .real8-status-expired {
     background: #f8d7da;
     border: 1px solid #dc3545;
+}
+
+.real8-status-sent {
+    background: #e7f3ff;
+    border: 1px solid #b6d4fe;
+}
+
+.real8-spinner-lg {
+    display: inline-block;
+    width: 36px;
+    height: 36px;
+    border-width: 4px;
+}
+
+.real8-sent-tx code {
+    background: transparent;
+    font-size: 0.9em;
 }
 
 .real8-status-icon {
@@ -453,7 +501,7 @@ a.woocommerce-button.button.cancel:hover {
 }
 </style>
 
-<?php if ($status !== 'completed' && $status !== 'confirmed' && $status !== 'expired'): ?>
+<?php if ($status !== 'completed' && $status !== 'confirmed' && $status !== 'expired' && !$sent_tx): // $wallet_url only exists in the awaiting-payment branch ?>
 <script>
 (function(){
     // Minimal QR code generator (alphanumeric mode, error correction L)

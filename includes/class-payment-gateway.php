@@ -549,6 +549,18 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
 
         $status = $payment ? $payment->status : 'pending';
 
+        // The wallet appends the Stellar tx hash to the return URL after it
+        // submits the payment (real8_tx). When present and the payment is not
+        // yet confirmed, the template shows a "payment sent, confirming" state
+        // instead of the pay-now instructions, and JS verifies immediately.
+        $sent_tx = '';
+        if (isset($_GET['real8_tx'])) {
+            $candidate = sanitize_text_field(wp_unslash($_GET['real8_tx']));
+            if (preg_match('/^[0-9a-f]{64}$/i', $candidate)) {
+                $sent_tx = strtolower($candidate);
+            }
+        }
+
         // Include the payment instructions template
         include REAL8_GATEWAY_PLUGIN_DIR . 'includes/templates/payment-instructions.php';
     }

@@ -5,6 +5,16 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.0] - 2026-07-10
+
+### Added
+- **"Payment Sent" state on the thank-you page.** The REAL8 Wallet (v4.7.10+) appends the Stellar transaction hash to the return URL (`real8_tx`) after submitting the payment. When present, the thank-you page shows "Payment Sent, confirming on the Stellar network" with the tx hash instead of the pay-now instructions, removing the confusing moment where a customer who just paid saw "Awaiting Payment". English and Spanish.
+- **Immediate verification on arrival.** When the wallet hands back a tx hash, the status script runs a forced server-side Horizon check ~1 second after the page loads (instead of a 5 s first check) and polls every 8 s (instead of 15 s). Typical time-to-confirmed drops from up to a minute to a few seconds.
+- **Settlement reported to the payment-intent API.** When the payment monitor confirms a payment on-chain, it now calls `POST https://api.real8.org/payment-intents/{id}/paid` (HMAC-signed, api v1.7.6+) so a revisited pay link shows "paid" instead of pending or expired. Best-effort: failures only log, the order state is authoritative.
+
+### Fixed
+- The manual "Check payment now" feedback messages no longer fire for automatic background checks (they were reserved for the button but shared a code path with the new forced arrival check).
+
 ## [4.4.0] - 2026-04-18
 
 ### Security

@@ -3,7 +3,7 @@
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: REAL8 Gateway for WooCommerce 4.4.0\n"
+"Project-Id-Version: REAL8 Gateway for WooCommerce 4.5.0\n"
 "Report-Msgid-Bugs-To: https://github.com/REAL8-crypto/real8-gateway/issues\n"
 "POT-Creation-Date: 2026-03-07 12:00+0000\n"
 "PO-Revision-Date: 2026-03-07 12:00+0000\n"
@@ -395,3 +395,19 @@ msgstr "Escanea con tu teléfono para pagar"
 #: includes/templates/payment-instructions.php
 msgid "Or pay manually from any Stellar wallet"
 msgstr "O paga manualmente desde cualquier billetera Stellar"
+
+#: includes/templates/payment-instructions.php
+msgid "Payment Sent"
+msgstr "Pago enviado"
+
+#: includes/templates/payment-instructions.php
+msgid "Your wallet reported the %s payment as sent. Confirming it on the Stellar network, this usually takes under a minute. This page updates automatically."
+msgstr "Tu Billetera ha indicado que el pago de %s fue enviado. Confirmándolo en la red Stellar, normalmente tarda menos de un minuto. Esta página se actualiza automáticamente."
+
+#: includes/templates/payment-instructions.php
+msgid "Transaction:"
+msgstr "Transacción:"
+
+#: includes/templates/payment-instructions.php
+msgid "Verifying payment on the network..."
+msgstr "Verificando el pago en la red..."

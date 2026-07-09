@@ -56,24 +56,31 @@
             var status = $paymentBox.data('status');
             var orderId = $paymentBox.data('order-id');
             var orderKey = $paymentBox.data('order-key') || real8_gateway.order_key || (new URLSearchParams(window.location.search).get('key') || '');
+            var sentTx = $paymentBox.data('sent-tx') || '';
 
             if (status === 'pending') {
-                this.startPaymentCheck(orderId, orderKey);
+                this.startPaymentCheck(orderId, orderKey, !!sentTx);
                 this.startCountdown();
             }
         },
 
         /**
          * Start periodic payment status checks
+         *
+         * @param {boolean} paymentSent The wallet handed back a tx hash in the
+         *   return URL, so the payment is already on the network — verify
+         *   immediately and poll faster.
          */
-        startPaymentCheck: function(orderId, orderKey) {
+        startPaymentCheck: function(orderId, orderKey, paymentSent) {
             var self = this;
-            var interval = real8_gateway.check_interval || 15000;
+            var interval = paymentSent ? 8000 : (real8_gateway.check_interval || 15000);
+            var initialDelay = paymentSent ? 1000 : 5000;
 
-            // Initial check after 5 seconds
+            // Initial check (force=2: server queries Horizon right away but the
+            // UI stays silent — force=1 is reserved for the manual button)
             setTimeout(function() {
-                self.checkPaymentStatus(orderId, orderKey, 0);
-            }, 5000);
+                self.checkPaymentStatus(orderId, orderKey, paymentSent ? 2 : 0);
+            }, initialDelay);
 
             // Then check every X seconds
             this.checkInterval = setInterval(function() {
@@ -131,7 +138,9 @@
 
                     if (response.success) {
                         self.handleStatusResponse(response.data || {});
-                        if (force) {
+                        // Manual-button feedback only (force === 1). The automatic
+                        // forced check on arrival (force === 2) stays silent.
+                        if (force === 1) {
                             var st = (response.data && response.data.status) ? response.data.status : '';
                             if (response.data && response.data.check_error) {
                                 self.showManualMessage(response.data.check_error, 'error');
