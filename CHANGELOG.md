@@ -5,6 +5,11 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.2] - 2026-07-13
+
+### Fixed
+- **The payment monitor now actually hooks into cron.** The monitor bootstrapped itself with `add_action('init', ...)` from a file that is only included during the `init` action; WP_Hook silently skips callbacks added to the currently running hook at the same priority, so `real8_gateway_check_payments` never had a callback and every cron run was a no-op (verified with `has_action()` in production). The monitor is now instantiated directly at include time. Together with 4.5.1's self-healing schedule, this is the first release where the background monitor genuinely runs.
+
 ## [4.5.1] - 2026-07-13
 
 ### Fixed

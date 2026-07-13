@@ -458,7 +458,12 @@ foreach ($pending as $payment) {
     }
 }
 
-// Initialize
-add_action('init', function() {
-    REAL8_Payment_Monitor::get_instance();
-});
+// Initialize immediately at include time (v4.5.2). This file is included
+// from the plugin's init() callback, which itself runs ON the init action;
+// registering another init callback at the same priority from inside the
+// running hook is silently skipped by WP_Hook, so the monitor never
+// instantiated on cron/front-end loads and real8_gateway_check_payments had
+// no callback at all (verified with has_action() in production 2026-07-13).
+// The Stellar API class this constructor needs is required before this file
+// in include_files(), so direct instantiation is safe here.
+REAL8_Payment_Monitor::get_instance();
