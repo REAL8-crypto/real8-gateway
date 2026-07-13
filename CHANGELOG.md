@@ -5,6 +5,13 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.1] - 2026-07-13
+
+### Fixed
+- **Payment monitor cron self-heals.** Scheduling of the every-minute `real8_gateway_check_payments` event used to happen only in the plugin activation hook, so a plugin update by file replacement (or any loss of the cron event) left the monitor permanently unscheduled and orders confirmed only while the customer's browser sat on the thank-you page. The event is now re-scheduled from `init` whenever it is missing. Found 2026-07-13 with the cron absent on both production installs.
+- **One last Horizon check before expiring a payment.** The monitor used to mark a payment expired as soon as it ran past the deadline, without checking the network. Combined with a cron gap longer than the payment window, a customer who paid within minutes still had the order expire and get cancelled (order paid at minute 2, cancelled at minute 80, real case 2026-07-10). The monitor now always checks Horizon first and only expires when no matching payment exists; a failed Horizon lookup never expires a payment.
+- **Late confirmations revive cancelled orders visibly.** WooCommerce's `payment_complete()` already accepts cancelled/failed orders; the monitor now adds an explicit order note ("Payment found on Stellar after the order had been marked ..., reviving the order") so the revival is traceable in the order history.
+
 ## [4.5.0] - 2026-07-10
 
 ### Added

@@ -3,7 +3,7 @@
  * Plugin Name: REAL8 Gateway for WooCommerce
  * Plugin URI: https://real8.org
  * Description: Accept REAL8 token payments on the Stellar blockchain for WooCommerce orders
- * Version: 4.5.0
+ * Version: 4.5.1
  * Author: REAL8
  * Author URI: https://real8.org
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('REAL8_GATEWAY_VERSION', '4.5.0');
+define('REAL8_GATEWAY_VERSION', '4.5.1');
 define('REAL8_GATEWAY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('REAL8_GATEWAY_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('REAL8_GATEWAY_PLUGIN_FILE', __FILE__);
@@ -107,6 +107,13 @@ add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), 
         }
         $this->include_files();
         $this->maybe_migrate_settings();
+
+        // Self-healing cron (v4.5.1): scheduling used to happen only in the
+        // activation hook, so a plugin update by file replacement (or any
+        // event loss) left the payment monitor permanently unscheduled;
+        // found 2026-07-13 with the cron missing on BOTH production sites,
+        // orders confirming only via browser-side thank-you polling.
+        $this->schedule_payment_checks();
     }
 
     /**

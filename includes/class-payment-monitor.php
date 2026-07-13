@@ -73,15 +73,7 @@ foreach ($pending as $payment) {
      * @param string $merchant_address Merchant's Stellar address
      */
     private function check_single_payment($payment, $merchant_address) {
-        global $wpdb;
-        $table = $wpdb->prefix . 'real8_payments';
-
-        // Check if expired
-        $expires_at = strtotime($payment->expires_at);
-        if (time() > $expires_at) {
-            $this->mark_payment_expired($payment);
-            return;
-        }
+        $is_past_deadline = time() > strtotime($payment->expires_at);
 
         // Get asset code and issuer from payment record
         $asset_code = isset($payment->asset_code) ? $payment->asset_code : 'REAL8';
@@ -90,7 +82,11 @@ foreach ($pending as $payment) {
         // Get expected amount (column renamed from amount_real8 to amount_token in v3.0)
         $expected_amount = isset($payment->amount_token) ? (float) $payment->amount_token : (float) $payment->amount_real8;
 
-        // Check for payment on Stellar
+        // Check for payment on Stellar. This runs even past the deadline
+        // (v4.5.1): expiring without one last Horizon check lost payments
+        // made in time but seen late. With a cron gap longer than the
+        // payment window, a customer who paid within minutes still had the
+        // order expire and get cancelled (prowoos order 10214, 2026-07-10).
         $result = $this->stellar_api->check_payment(
             $merchant_address,
             trim((string) $payment->memo),
@@ -103,11 +99,18 @@ foreach ($pending as $payment) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log('REAL8 Gateway: check_single_payment error: ' . $result->get_error_message());
             }
+            // Never expire on a failed lookup — a Horizon hiccup at the
+            // deadline must not discard a possibly-settled payment.
             return;
         }
 
         if ($result) {
             $this->mark_payment_confirmed($payment, $result, $asset_code);
+            return;
+        }
+
+        if ($is_past_deadline) {
+            $this->mark_payment_expired($payment);
         }
     }
 
@@ -183,6 +186,18 @@ foreach ($pending as $payment) {
         // Update order
         $order = wc_get_order($payment->order_id);
         if ($order) {
+            // Late confirmation of an order that already timed out (v4.5.1):
+            // WooCommerce's payment_complete() below accepts cancelled/failed
+            // orders (OrderStatus::PAYMENT_COMPLETE_STATUSES) and revives
+            // them to processing, so leave an explicit trace of the revival.
+            if ($order->has_status(array('cancelled', 'failed'))) {
+                $order->add_order_note(sprintf(
+                    /* translators: %s: previous order status */
+                    __('Payment found on Stellar after the order had been marked "%s", reviving the order.', 'real8-gateway'),
+                    $order->get_status()
+                ));
+            }
+
             // Add order note with transaction details
             $note = sprintf(
                 /* translators: 1: amount, 2: token code, 3: tx hash, 4: sender address */
