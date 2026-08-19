@@ -22,7 +22,12 @@ jobs:
 
       - name: Deploy via rsync
         run: |
+          # --chown/--chmod keep the plugin dir writable by both this deploy
+          # (admin) and WordPress itself (www-data, for wp-cli / auto-updates);
+          # without them rsync leaves admin:sudo 644 and WP cannot update the
+          # plugin on real8.org (seen 2026-08-19).
           rsync -avz --delete \
+            --chown=:www-data --chmod=D775,F664 \
             --exclude '.git' \
             --exclude '.github' \
             --exclude 'node_modules' \
