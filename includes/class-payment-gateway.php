@@ -469,12 +469,16 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
             'expires_minutes' => (int) $this->payment_timeout,
         ));
 
-        $signature = hash_hmac('sha256', $body, $secret);
+        // HMAC v2 (real8-gateway 4.5.3 / api 1.7.9): bound to method, path and
+        // time so a captured request cannot be replayed elsewhere or later.
+        $ts        = (string) time();
+        $signature = hash_hmac('sha256', "v2\nPOST\n/payment-intents\n" . $ts . "\n" . $body, $secret);
 
         $response = wp_remote_post('https://api.real8.org/payment-intents', array(
             'headers' => array(
                 'Content-Type'      => 'application/json',
                 'X-REAL8-Signature' => $signature,
+                'X-REAL8-Timestamp' => $ts,
             ),
             'body'    => $body,
             'timeout' => 10,
@@ -697,23 +701,41 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
             wp_send_json_error(array('message' => 'Payment not found'), 404);
         }
 
-        // Expiry handling (keep DB + order consistent)
+        // Expiry handling (keep DB + order consistent). v4.5.3: same policy as the
+        // cron monitor (v4.5.1): one last Horizon check before expiring, and never
+        // expire on a failed lookup. Before this, a customer who paid at minute 29
+        // and landed here at minute 30 had a paid order marked failed (audit
+        // 2026-08-19, WP-1).
         $expires_at = strtotime($payment->expires_at);
         if ($expires_at && time() > $expires_at && $payment->status === 'pending') {
-            $wpdb->update($table, array('status' => 'expired'), array('order_id' => $order_id));
+            $late = class_exists('REAL8_Payment_Monitor')
+                ? REAL8_Payment_Monitor::get_instance()->manual_check_order($order_id)
+                : new WP_Error('no_monitor', 'Payment monitor not available');
+            if ($late === true) {
+                $force = false; // confirmed below, do not re-check
+            } elseif (is_wp_error($late)) {
+                wp_send_json_success(array(
+                    'status'      => 'pending',
+                    'message'     => __('Payment window has expired; final verification pending', 'real8-gateway'),
+                    'expires_in'  => 0,
+                    'check_error' => $late->get_error_message(),
+                ));
+            } else {
+                $wpdb->update($table, array('status' => 'expired'), array('order_id' => $order_id));
 
-            $asset_code = isset($payment->asset_code) ? $payment->asset_code : 'REAL8';
-            $order->update_status('failed', sprintf(
-                /* translators: %s: token code */
-                __('%s payment expired', 'real8-gateway'),
-                $asset_code
-            ));
+                $asset_code = isset($payment->asset_code) ? $payment->asset_code : 'REAL8';
+                $order->update_status('failed', sprintf(
+                    /* translators: %s: token code */
+                    __('%s payment expired', 'real8-gateway'),
+                    $asset_code
+                ));
 
-            wp_send_json_success(array(
-                'status' => 'expired',
-                'message' => __('Payment window has expired', 'real8-gateway'),
-                'expires_in' => 0,
-            ));
+                wp_send_json_success(array(
+                    'status' => 'expired',
+                    'message' => __('Payment window has expired', 'real8-gateway'),
+                    'expires_in' => 0,
+                ));
+            }
         }
 
         // Optional: trigger a manual on-demand check (throttled) to confirm faster after user pays.
@@ -772,7 +794,14 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
             wp_send_json_error(array('message' => 'Invalid nonce'), 403);
         }
 
-        $tokens = isset($_REQUEST['tokens']) ? array_map('sanitize_text_field', (array) $_POST['tokens']) : array('REAL8');
+        // Only known registry codes, at most 10: an unbounded list meant one
+        // outbound Horizon request per unknown code (audit 2026-08-19, WP-8).
+        $tokens = isset($_REQUEST['tokens']) ? array_map('sanitize_text_field', (array) wp_unslash($_REQUEST['tokens'])) : array('REAL8');
+        $tokens = array_values(array_intersect(array_map('strtoupper', $tokens), REAL8_Token_Registry::get_all_token_codes()));
+        $tokens = array_slice(array_unique($tokens), 0, 10);
+        if (empty($tokens)) {
+            $tokens = array('REAL8');
+        }
         $prices = $this->stellar_api->get_all_token_prices($tokens);
 
         wp_send_json_success(array(

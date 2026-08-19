@@ -18,6 +18,8 @@ class REAL8_GitHub_Updater {
     const CACHE_KEY  = 'real8_gateway_update_data';
     const CACHE_EXPIRY = 43200; // 12 hours
     const UPDATE_URL = 'https://api.real8.org/gateway/update-check';
+    /** Only packages under this URL prefix are accepted (WP-2, 2026-08-19) */
+    const PACKAGE_PREFIX = 'https://github.com/REAL8-crypto/real8-gateway/releases/download/';
     const ASSETS_URL = 'https://raw.githubusercontent.com/REAL8-crypto/real8-gateway/main/assets/images/';
 
     /**
@@ -187,6 +189,21 @@ class REAL8_GitHub_Updater {
         $data = json_decode(wp_remote_retrieve_body($response), true);
 
         if (!is_array($data) || empty($data['version'])) {
+            return false;
+        }
+
+        // Only ever install packages from this plugin's own GitHub releases.
+        // The update endpoint is first-party, but a compromised response must
+        // not be able to point every merchant at an arbitrary zip
+        // (audit 2026-08-19, WP-2). Anything else is ignored (no update offered).
+        if (!empty($data['package'])) {
+            $pkg = (string) $data['package'];
+            if (strpos($pkg, self::PACKAGE_PREFIX) !== 0) {
+                error_log('[REAL8 Updater] Ignoring update package outside ' . self::PACKAGE_PREFIX . ': ' . $pkg);
+                unset($data['package']);
+            }
+        }
+        if (empty($data['package'])) {
             return false;
         }
 

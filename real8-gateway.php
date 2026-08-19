@@ -3,7 +3,7 @@
  * Plugin Name: REAL8 Gateway for WooCommerce
  * Plugin URI: https://real8.org
  * Description: Accept REAL8 token payments on the Stellar blockchain for WooCommerce orders
- * Version: 4.5.2
+ * Version: 4.5.3
  * Author: REAL8
  * Author URI: https://real8.org
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('REAL8_GATEWAY_VERSION', '4.5.2');
+define('REAL8_GATEWAY_VERSION', '4.5.3');
 define('REAL8_GATEWAY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('REAL8_GATEWAY_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('REAL8_GATEWAY_PLUGIN_FILE', __FILE__);
@@ -421,26 +421,45 @@ add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), 
             return $send_error(__('Payment not found', 'real8-gateway'), 'payment_not_found');
         }
 
-        // Expiry handling (keep DB + order consistent)
+        // Expiry handling (keep DB + order consistent). v4.5.3: one last Horizon
+        // check before expiring, never expire on a failed lookup (same policy as
+        // the cron monitor since v4.5.1; audit 2026-08-19, WP-1).
         $expires_at = strtotime($payment->expires_at);
         if ($expires_at && time() > $expires_at && $payment->status === 'pending') {
-            $wpdb->update($table, array('status' => 'expired'), array('order_id' => $order_id));
+            $late = class_exists('REAL8_Payment_Monitor')
+                ? \REAL8_Payment_Monitor::get_instance()->manual_check_order($order_id)
+                : new \WP_Error('no_monitor', 'Payment monitor not available');
+            if ($late === true) {
+                $force = false; // confirmed below, do not re-check
+            } elseif (is_wp_error($late)) {
+                return new \WP_REST_Response(array(
+                    'success' => true,
+                    'data' => array(
+                        'status'      => 'pending',
+                        'message'     => __('Payment window has expired; final verification pending', 'real8-gateway'),
+                        'expires_in'  => 0,
+                        'check_error' => $late->get_error_message(),
+                    ),
+                ), 200);
+            } else {
+                $wpdb->update($table, array('status' => 'expired'), array('order_id' => $order_id));
 
-            $asset_code = isset($payment->asset_code) ? $payment->asset_code : 'REAL8';
-            $order->update_status('failed', sprintf(
-                /* translators: %s: token code */
-                __('%s payment expired', 'real8-gateway'),
-                $asset_code
-            ));
+                $asset_code = isset($payment->asset_code) ? $payment->asset_code : 'REAL8';
+                $order->update_status('failed', sprintf(
+                    /* translators: %s: token code */
+                    __('%s payment expired', 'real8-gateway'),
+                    $asset_code
+                ));
 
-            return new \WP_REST_Response(array(
-                'success' => true,
-                'data' => array(
-                    'status' => 'expired',
-                    'message' => __('Payment window has expired', 'real8-gateway'),
-                    'expires_in' => 0,
-                ),
-            ), 200);
+                return new \WP_REST_Response(array(
+                    'success' => true,
+                    'data' => array(
+                        'status' => 'expired',
+                        'message' => __('Payment window has expired', 'real8-gateway'),
+                        'expires_in' => 0,
+                    ),
+                ), 200);
+            }
         }
 
         // Optional: trigger a manual on-demand check (throttled) to confirm faster after user pays.

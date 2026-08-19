@@ -510,9 +510,12 @@ a.woocommerce-button.button.cancel:hover {
     var canvas = document.getElementById('real8-qr-canvas');
     if (!canvas) return;
 
-    // Load QR library from CDN (lightweight, no npm needed)
+    // QR library vendored with the plugin (qrcode@1.5.1 build, sha256
+    // ba588dfaf738bf8980e5da3b680ab1ce3f205af7577454c16f9c0506fe744df4).
+    // Loading an unpinned CDN copy on the page that shows the payment
+    // address/amount/QR was a supply-chain risk (audit 2026-08-19, WP-3).
     var s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js';
+    s.src = <?php echo wp_json_encode(REAL8_GATEWAY_PLUGIN_URL . 'assets/js/qrcode-1.5.1.js?ver=' . REAL8_GATEWAY_VERSION); ?>;
     s.onload = function() {
         if (typeof QRCode !== 'undefined' && QRCode.toCanvas) {
             QRCode.toCanvas(canvas, url, { width: 180, margin: 2 }, function(err) {

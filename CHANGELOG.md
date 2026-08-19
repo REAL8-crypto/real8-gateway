@@ -5,6 +5,18 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.3] - 2026-08-19
+
+### Fixed
+- **Paid orders are no longer failed by the browser-side expiry check.** The thank-you page poll and the "Check payment now" button expired a pending payment and failed the order without looking at Horizon first; a customer who paid at minute 29 and landed on the page at minute 30 got a paid-but-failed order. Both handlers now do the same final Horizon check as the cron monitor (4.5.1), and never expire on a failed lookup.
+- **A confirmed payment is claimed atomically**, so the cron monitor and the browser check cannot both complete the same order; and a Stellar transaction hash can settle only one payment row (an old transaction carrying a reused memo, or one already bound to another row, is ignored).
+
+### Security
+- **QR library vendored.** The thank-you page loaded `qrcode` from an unpinned jsDelivr URL (resolving to 1.5.1); that exact build now ships inside the plugin (`assets/js/qrcode-1.5.1.js`, sha256 `ba588dfa…`) and no third-party script runs on the page that shows the payment address, amount and QR.
+- **Updater accepts only this plugin's GitHub release packages.** Any other `package` URL returned by the update endpoint is ignored.
+- **Payment-intent requests use HMAC v2** (signature over method, path, timestamp and body, plus an `X-REAL8-Timestamp` header), so a captured request cannot be replayed against another intent or later. Requires api.real8.org 1.7.9 (deployed), which still accepts the old scheme for older plugin versions.
+- `stellar_get_token_prices` only accepts known registry codes (max 10).
+
 ## [4.5.2] - 2026-07-13
 
 ### Fixed

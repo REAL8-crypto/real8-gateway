@@ -104,6 +104,10 @@ foreach ($pending as $payment) {
             return;
         }
 
+        if ($result && !$this->tx_is_plausibly_for_payment($payment, $result)) {
+            $result = false; // an old on-chain tx carrying this memo is not this order's payment
+        }
+
         if ($result) {
             $this->mark_payment_confirmed($payment, $result, $asset_code);
             return;
@@ -170,18 +174,32 @@ foreach ($pending as $payment) {
     private function mark_payment_confirmed($payment, $result, $asset_code = 'REAL8') {
         global $wpdb;
         $table = $wpdb->prefix . 'real8_payments';
+        $tx_hash = isset($result['tx_hash']) ? strtolower((string) $result['tx_hash']) : '';
 
-        $wpdb->update(
-            $table,
-            array(
-                'status' => 'confirmed',
-                'stellar_tx_hash' => $result['tx_hash'],
-                'paid_at' => current_time('mysql', true),
-            ),
-            array('id' => $payment->id),
-            array('%s', '%s', '%s'),
-            array('%d')
-        );
+        // A transaction hash can settle exactly one payment row. If another row
+        // already carries it (old on-chain payment with a reused memo, reopened
+        // order), refuse instead of confirming twice (audit 2026-08-19, WP-10).
+        if ($tx_hash !== '') {
+            $other = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM $table WHERE stellar_tx_hash = %s AND id <> %d LIMIT 1",
+                $tx_hash, $payment->id
+            ));
+            if ($other) {
+                error_log(sprintf('REAL8 Gateway: tx %s already confirmed payment row %d, not confirming row %d (order %d)', $tx_hash, (int) $other, (int) $payment->id, (int) $payment->order_id));
+                return;
+            }
+        }
+
+        // Atomic claim: cron and the browser-side check can both find the
+        // payment; only the one that flips the row proceeds to payment_complete
+        // (audit 2026-08-19, WP-11).
+        $claimed = $wpdb->query($wpdb->prepare(
+            "UPDATE $table SET status = 'confirmed', stellar_tx_hash = %s, paid_at = %s WHERE id = %d AND status <> 'confirmed'",
+            $tx_hash, current_time('mysql', true), $payment->id
+        ));
+        if ($claimed === 0 || $claimed === false) {
+            return;
+        }
 
         // Update order
         $order = wc_get_order($payment->order_id);
@@ -248,12 +266,16 @@ foreach ($pending as $payment) {
         }
 
         $body = wp_json_encode(array('tx_hash' => strtolower((string) $tx_hash)));
-        $signature = hash_hmac('sha256', $body, REAL8_PAYMENT_INTENT_SECRET);
+        $path = '/payment-intents/' . rawurlencode($intent_id) . '/paid';
+        // HMAC v2 (4.5.3 / api 1.7.9): bound to method, path and time.
+        $ts        = (string) time();
+        $signature = hash_hmac('sha256', "v2\nPOST\n" . $path . "\n" . $ts . "\n" . $body, REAL8_PAYMENT_INTENT_SECRET);
 
-        $response = wp_remote_post('https://api.real8.org/payment-intents/' . rawurlencode($intent_id) . '/paid', array(
+        $response = wp_remote_post('https://api.real8.org' . $path, array(
             'headers' => array(
                 'Content-Type'      => 'application/json',
                 'X-REAL8-Signature' => $signature,
+                'X-REAL8-Timestamp' => $ts,
             ),
             'body'    => $body,
             'timeout' => 8,
@@ -384,12 +406,40 @@ foreach ($pending as $payment) {
             return $result;
         }
 
+        if ($result && !$this->tx_is_plausibly_for_payment($payment, $result)) {
+            $result = false;
+        }
+
         if ($result) {
             $this->mark_payment_confirmed($payment, $result, $asset_code);
             return true;
         }
 
         return false;
+    }
+
+    /**
+     * A matching on-chain tx must not predate the payment row by more than a
+     * day. The memo is reused across payment rows of the same order, so an old
+     * (e.g. already refunded) transaction could otherwise confirm a new row
+     * (audit 2026-08-19, WP-10). The 24 h margin absorbs any timezone offset
+     * between the DB timestamp and Horizon's UTC timestamps.
+     *
+     * @param object $payment Payment row
+     * @param array  $result  check_payment() result (has created_at from Horizon)
+     * @return bool
+     */
+    private function tx_is_plausibly_for_payment($payment, $result) {
+        $row_ts = isset($payment->created_at) ? strtotime((string) $payment->created_at) : false;
+        $tx_ts  = isset($result['created_at']) ? strtotime((string) $result['created_at']) : false;
+        if (!$row_ts || !$tx_ts) {
+            return true; // cannot judge, keep previous behaviour
+        }
+        if ($tx_ts < $row_ts - DAY_IN_SECONDS) {
+            error_log(sprintf('REAL8 Gateway: ignoring tx %s dated %s for payment row %d created %s (too old)', isset($result['tx_hash']) ? $result['tx_hash'] : '?', (string) $result['created_at'], (int) $payment->id, (string) $payment->created_at));
+            return false;
+        }
+        return true;
     }
 
     /**
