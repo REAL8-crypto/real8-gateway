@@ -127,13 +127,23 @@ foreach ($pending as $payment) {
         global $wpdb;
         $table = $wpdb->prefix . 'real8_payments';
 
-        $wpdb->update(
-            $table,
-            array('status' => 'expired'),
-            array('id' => $payment->id),
-            array('%s'),
-            array('%d')
-        );
+        // Only a row that is still pending may expire. A confirm that already
+        // won the row, or one that wins it before this write, must not be
+        // overwritten, and the WooCommerce order must not be failed afterwards.
+        $expired = $wpdb->query($wpdb->prepare(
+            "UPDATE $table SET status = 'expired' WHERE id = %d AND status = 'pending'",
+            $payment->id
+        ));
+        if (!$expired) {
+            return;
+        }
+        $still = $wpdb->get_var($wpdb->prepare(
+            "SELECT status FROM $table WHERE id = %d",
+            $payment->id
+        ));
+        if ($still !== 'expired') {
+            return;
+        }
 
         // Get asset code and amount for message
         $asset_code = isset($payment->asset_code) ? $payment->asset_code : 'REAL8';
