@@ -43,6 +43,12 @@ class REAL8_Payment_Monitor {
         global $wpdb;
         $table = $wpdb->prefix . 'real8_payments';
 
+        // A confirm that died before payment_complete() leaves a confirmed row
+        // on an unpaid order. Cron never looked at confirmed rows, so repair
+        // those before scanning pending ones. payment_complete() is a no-op
+        // on an order that is already paid.
+        $this->repair_detached_confirmations();
+
         // Get all pending payments
         $pending = $wpdb->get_results(
             "SELECT * FROM $table WHERE status = 'pending' ORDER BY created_at ASC"
@@ -352,6 +358,61 @@ foreach ($pending as $payment) {
     }
 
     /**
+     * Re-run payment_complete() for recent confirmed rows whose WooCommerce
+     * order is still unpaid. The atomic claim can succeed and the process can
+     * die before the order is completed. payment_complete() does not change an
+     * order that is already paid.
+     */
+    private function repair_detached_confirmations() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'real8_payments';
+        $rows = $wpdb->get_results(
+            "SELECT * FROM $table
+             WHERE status = 'confirmed'
+               AND stellar_tx_hash IS NOT NULL
+               AND stellar_tx_hash <> ''
+             ORDER BY id DESC
+             LIMIT 50"
+        );
+        if (!is_array($rows)) {
+            return;
+        }
+        foreach ($rows as $payment) {
+            $this->repair_unpaid_confirmed_order($payment);
+        }
+    }
+
+    /**
+     * Complete the WooCommerce order from a confirmed payment row.
+     *
+     * @param object $payment Payment row with stellar_tx_hash
+     * @return bool True when the order was unpaid and has now been completed
+     */
+    private function repair_unpaid_confirmed_order($payment) {
+        $order = wc_get_order($payment->order_id);
+        $tx_hash = isset($payment->stellar_tx_hash) ? (string) $payment->stellar_tx_hash : '';
+        if (!$order || $tx_hash === '' || $order->is_paid()) {
+            return false;
+        }
+
+        $order->add_order_note(__('Stellar payment was confirmed on the payment row but the order was still unpaid. Completing it now.', 'real8-gateway'));
+        $order->update_meta_data('_stellar_tx_hash', $tx_hash);
+        if (!empty($payment->paid_at)) {
+            $order->update_meta_data('_stellar_paid_at', $payment->paid_at);
+        }
+        $order->payment_complete($tx_hash);
+        $order->save();
+        $this->notify_intent_paid($order, $tx_hash);
+        error_log(sprintf(
+            'REAL8 Gateway: repaired confirmed payment row %d onto unpaid order #%d (%s)',
+            (int) $payment->id,
+            (int) $payment->order_id,
+            $tx_hash
+        ));
+        return true;
+    }
+
+    /**
      * Manual check for a specific order
      *
      * @param int $order_id WooCommerce order ID
@@ -371,6 +432,9 @@ foreach ($pending as $payment) {
         }
 
         if ($payment->status === 'confirmed') {
+            if ($this->repair_unpaid_confirmed_order($payment)) {
+                return true;
+            }
             return new WP_Error('already_paid', __('This order has already been paid', 'real8-gateway'));
         }
 
