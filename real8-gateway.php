@@ -3,7 +3,7 @@
  * Plugin Name: REAL8 Gateway for WooCommerce
  * Plugin URI: https://real8.org
  * Description: Accept REAL8 token payments on the Stellar blockchain for WooCommerce orders
- * Version: 4.5.3
+ * Version: 4.5.4
  * Author: REAL8
  * Author URI: https://real8.org
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('REAL8_GATEWAY_VERSION', '4.5.3');
+define('REAL8_GATEWAY_VERSION', '4.5.4');
 define('REAL8_GATEWAY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('REAL8_GATEWAY_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('REAL8_GATEWAY_PLUGIN_FILE', __FILE__);
@@ -442,14 +442,24 @@ add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), 
                     ),
                 ), 200);
             } else {
-                $wpdb->update($table, array('status' => 'expired'), array('order_id' => $order_id));
-
-                $asset_code = isset($payment->asset_code) ? $payment->asset_code : 'REAL8';
-                $order->update_status('failed', sprintf(
-                    /* translators: %s: token code */
-                    __('%s payment expired', 'real8-gateway'),
-                    $asset_code
-                ));
+                // Guarded expiry (issue #11): the row is expired and the order
+                // failed only if the row is still pending. If the cron monitor
+                // confirmed it between our lookup and this write, we must not
+                // fail a paid order; report it as pending and let the poll
+                // pick up the confirmation.
+                $expired = class_exists('REAL8_Payment_Monitor')
+                    ? \REAL8_Payment_Monitor::get_instance()->expire_payment($payment)
+                    : false;
+                if (!$expired) {
+                    return new \WP_REST_Response(array(
+                        'success' => true,
+                        'data' => array(
+                            'status'     => 'pending',
+                            'message'    => __('Payment window has expired; final verification pending', 'real8-gateway'),
+                            'expires_in' => 0,
+                        ),
+                    ), 200);
+                }
 
                 return new \WP_REST_Response(array(
                     'success' => true,

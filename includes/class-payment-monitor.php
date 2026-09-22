@@ -43,6 +43,8 @@ class REAL8_Payment_Monitor {
         global $wpdb;
         $table = $wpdb->prefix . 'real8_payments';
 
+        $this->repair_confirmed_rows();
+
         // Get all pending payments
         $pending = $wpdb->get_results(
             "SELECT * FROM $table WHERE status = 'pending' ORDER BY created_at ASC"
@@ -119,21 +121,106 @@ foreach ($pending as $payment) {
     }
 
     /**
+     * Repair confirmed rows whose order never completed (issue #10).
+     *
+     * mark_payment_confirmed() claims the row and only then completes the
+     * order. If PHP dies between the two, the row says `confirmed`, the order
+     * is still unpaid, cron ignores the row because it only scans `pending`,
+     * and the manual check answers "already paid". Nothing fixed it. This pass
+     * runs every cron tick over recent confirmed rows and completes any order
+     * that is still unpaid, from the transaction hash the row already holds.
+     *
+     * Bounded to the last 30 days so the query stays cheap forever.
+     *
+     * @return int Number of orders repaired
+     */
+    public function repair_confirmed_rows() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'real8_payments';
+
+        $rows = $wpdb->get_results(
+            "SELECT * FROM $table
+             WHERE status = 'confirmed'
+               AND stellar_tx_hash IS NOT NULL AND stellar_tx_hash <> ''
+               AND paid_at >= (UTC_TIMESTAMP() - INTERVAL 30 DAY)
+             ORDER BY paid_at ASC"
+        );
+        if (empty($rows)) {
+            return 0;
+        }
+
+        $repaired = 0;
+        foreach ($rows as $payment) {
+            if ($this->repair_confirmed_row($payment)) {
+                $repaired++;
+            }
+        }
+        return $repaired;
+    }
+
+    /**
+     * Complete the order of one confirmed row if it is still unpaid.
+     *
+     * @param object $payment Payment row with status confirmed
+     * @return bool True if the order was repaired, false if nothing was needed
+     */
+    private function repair_confirmed_row($payment) {
+        $order = wc_get_order($payment->order_id);
+        if (!$order || $order->is_paid()) {
+            return false;
+        }
+
+        $asset_code = isset($payment->asset_code) ? $payment->asset_code : 'REAL8';
+        $order->add_order_note(sprintf(
+            /* translators: %s: Stellar transaction hash */
+            __('Payment was confirmed on Stellar (TX: %s) but this order had not been completed. Completing it now.', 'real8-gateway'),
+            $payment->stellar_tx_hash
+        ));
+        $this->finalize_confirmed_order($payment, array(
+            'tx_hash'    => $payment->stellar_tx_hash,
+            'amount'     => isset($payment->amount_token) ? (float) $payment->amount_token : 0,
+            'from'       => __('(not recorded)', 'real8-gateway'),
+            'created_at' => $payment->paid_at,
+        ), $asset_code);
+
+        error_log(sprintf('REAL8 Gateway: repaired order #%d from confirmed payment row %d (TX: %s)', (int) $payment->order_id, (int) $payment->id, $payment->stellar_tx_hash));
+        return true;
+    }
+
+    /**
      * Mark payment as expired
      *
      * @param object $payment Payment record
      */
     private function mark_payment_expired($payment) {
+        $this->expire_payment($payment);
+    }
+
+    /**
+     * Expire a payment row and fail its order, but only if the row is still
+     * pending. Confirmation has had an atomic claim since 4.5.3; expiry did
+     * not, so cron, holding a row it had read as pending at the start of its
+     * pass, could stamp `expired` over a row the browser-side check had just
+     * confirmed, and the two browser-side expiry paths then failed the order
+     * without looking at its status at all (issue #11). One claim here, shared
+     * by all three, and the order is touched only by the caller that won it.
+     *
+     * @param object $payment Payment row as read earlier by the caller
+     * @return bool True if this call expired the row, false if it was no
+     *              longer pending (confirmed meanwhile, or already expired)
+     */
+    public function expire_payment($payment) {
         global $wpdb;
         $table = $wpdb->prefix . 'real8_payments';
 
-        $wpdb->update(
-            $table,
-            array('status' => 'expired'),
-            array('id' => $payment->id),
-            array('%s'),
-            array('%d')
-        );
+        $claimed = $wpdb->query($wpdb->prepare(
+            "UPDATE $table SET status = 'expired' WHERE id = %d AND status = 'pending'",
+            $payment->id
+        ));
+        if ($claimed === 0 || $claimed === false) {
+            error_log(sprintf('REAL8 Gateway: not expiring payment row %d (order #%d), it is no longer pending', (int) $payment->id, (int) $payment->order_id));
+            return false;
+        }
 
         // Get asset code and amount for message
         $asset_code = isset($payment->asset_code) ? $payment->asset_code : 'REAL8';
@@ -162,6 +249,7 @@ foreach ($pending as $payment) {
         }
 
         error_log(sprintf('REAL8 Gateway: Payment expired for order #%d (%s)', $payment->order_id, $asset_code));
+        return true;
     }
 
     /**
@@ -201,7 +289,21 @@ foreach ($pending as $payment) {
             return;
         }
 
-        // Update order
+        $this->finalize_confirmed_order($payment, $result, $asset_code);
+    }
+
+    /**
+     * Bring the WooCommerce order in line with a payment row that is already
+     * `confirmed`. Split out of mark_payment_confirmed() so the repair pass and
+     * the manual check can re-run it for a row whose order never completed
+     * (issue #10). Safe to repeat: payment_complete() only changes an order that
+     * is still in a payable status.
+     *
+     * @param object $payment    Payment row
+     * @param array  $result     tx_hash, amount, from, created_at
+     * @param string $asset_code Asset code for display
+     */
+    private function finalize_confirmed_order($payment, $result, $asset_code = 'REAL8') {
         $order = wc_get_order($payment->order_id);
         if ($order) {
             // Late confirmation of an order that already timed out (v4.5.1):
@@ -371,6 +473,11 @@ foreach ($pending as $payment) {
         }
 
         if ($payment->status === 'confirmed') {
+            // The row is paid. If the order disagrees, that is issue #10, and
+            // this is the moment to fix it rather than report "already paid".
+            if ($this->repair_confirmed_row($payment)) {
+                return true;
+            }
             return new WP_Error('already_paid', __('This order has already been paid', 'real8-gateway'));
         }
 

@@ -5,6 +5,12 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.4] - 2026-09-22
+
+### Fixed
+- **A confirmed payment can no longer be left detached from its order** (issue #10). Confirmation claims the payment row first and completes the WooCommerce order second; if PHP died in between, the row said `confirmed`, the order stayed unpaid, cron never looked at the row again because it only scans `pending`, and the manual check answered "already paid". Every cron tick now runs a repair pass over recent confirmed rows and completes any order that is still unpaid, from the transaction hash the row already holds; the manual check does the same repair instead of stopping at "already paid". `payment_complete()` only changes an order that is still payable, so the pass is safe to repeat.
+- **Expiry can no longer overwrite a confirmed payment** (issue #11). All three expiry paths, the cron monitor, the thank-you page poll and the REST status check, wrote `expired` by id or order id with no status guard, and the two browser-side ones then failed the order without checking its status. A confirmation landing in that window would have been stamped over, and in the browser paths a paid order failed. Expiry now goes through one guarded claim, `WHERE id = %d AND status = 'pending'`, and the order is touched only by the caller that won it; the browser paths report "final verification pending" when they lose the claim, and the poll picks up the confirmation.
+
 ## [4.5.3] - 2026-08-19
 
 ### Fixed

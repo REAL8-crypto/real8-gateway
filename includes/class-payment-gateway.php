@@ -721,14 +721,21 @@ class WC_Gateway_REAL8 extends WC_Payment_Gateway {
                     'check_error' => $late->get_error_message(),
                 ));
             } else {
-                $wpdb->update($table, array('status' => 'expired'), array('order_id' => $order_id));
-
-                $asset_code = isset($payment->asset_code) ? $payment->asset_code : 'REAL8';
-                $order->update_status('failed', sprintf(
-                    /* translators: %s: token code */
-                    __('%s payment expired', 'real8-gateway'),
-                    $asset_code
-                ));
+                // Guarded expiry (issue #11): the row is expired and the order
+                // failed only if the row is still pending. If the cron monitor
+                // confirmed it between our lookup and this write, we must not
+                // fail a paid order; report it as pending and let the poll
+                // pick up the confirmation.
+                $expired = class_exists('REAL8_Payment_Monitor')
+                    ? REAL8_Payment_Monitor::get_instance()->expire_payment($payment)
+                    : false;
+                if (!$expired) {
+                    wp_send_json_success(array(
+                        'status'     => 'pending',
+                        'message'    => __('Payment window has expired; final verification pending', 'real8-gateway'),
+                        'expires_in' => 0,
+                    ));
+                }
 
                 wp_send_json_success(array(
                     'status' => 'expired',
