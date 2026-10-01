@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-01T21:00:15+00:00\n"
+"POT-Creation-Date: 2026-10-01T21:56:10+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: real8-gateway\n"
@@ -35,12 +35,12 @@ msgstr ""
 msgid "REAL8"
 msgstr ""
 
-#: includes/class-blocks-payment-method.php:38
+#: includes/class-blocks-payment-method.php:39
 #: includes/class-payment-gateway.php:118
 msgid "Pay with REAL8"
 msgstr ""
 
-#: includes/class-blocks-payment-method.php:39
+#: includes/class-blocks-payment-method.php:40
 msgid "Pay with REAL8 tokens on Stellar."
 msgstr ""
 
@@ -148,61 +148,62 @@ msgstr ""
 msgid "Display REAL8 token equivalents below product prices throughout the shop."
 msgstr ""
 
-#: includes/class-payment-gateway.php:230
+#: includes/class-payment-gateway.php:234
 msgid "Invalid Stellar address. Must be 56 characters starting with G."
 msgstr ""
 
-#: includes/class-payment-gateway.php:275
+#: includes/class-payment-gateway.php:279
 msgid "REAL8 Payments requires an unpaid USD order and a configured gateway."
 msgstr ""
 
-#: includes/class-payment-gateway.php:286
+#: includes/class-payment-gateway.php:290
 msgid "Invalid order access."
 msgstr ""
 
-#: includes/class-payment-gateway.php:300
-#: includes/class-stellar-payment-api.php:599
-#: includes/class-stellar-payment-api.php:603
+#: includes/class-payment-gateway.php:304
+#: includes/class-stellar-payment-api.php:616
+#: includes/class-stellar-payment-api.php:620
 msgid "Invalid token configuration."
 msgstr ""
 
-#: includes/class-payment-gateway.php:323
+#: includes/class-payment-gateway.php:327
+#: includes/class-payment-gateway.php:467
 msgid "Previous payment verification is pending. Please try again shortly."
 msgstr ""
 
 #. translators: 1: amount, 2: asset code, 3: memo, 4: expiry time.
-#: includes/class-payment-gateway.php:350
+#: includes/class-payment-gateway.php:365
 #, php-format
 msgid "Customer returned to pay. Reusing existing payment details: %1$s %2$s, Memo: %3$s, Expires: %4$s"
 msgstr ""
 
 #. translators: 1: amount, 2: asset code.
-#: includes/class-payment-gateway.php:392
+#: includes/class-payment-gateway.php:407
 #, php-format
 msgid "Reusing locked REAL8 quote from previous attempt: %1$s %2$s."
 msgstr ""
 
-#: includes/class-payment-gateway.php:402
+#: includes/class-payment-gateway.php:417
 msgid "Unable to calculate payment amount. Please try again."
 msgstr ""
 
-#: includes/class-payment-gateway.php:430
+#: includes/class-payment-gateway.php:474
 msgid "Unable to save payment instructions. Please try again."
 msgstr ""
 
 #. translators: 1: amount, 2: asset code, 3: USD price, 4: memo, 5: public address, 6: expiry.
-#: includes/class-payment-gateway.php:437
+#: includes/class-payment-gateway.php:481
 #, php-format
 msgid "Stellar payment initiated: %1$s %2$s (@ $%3$s/%2$s). Memo: %4$s. Address: %5$s. Expires: %6$s"
 msgstr ""
 
 #. translators: %s: token code
-#: includes/class-payment-gateway.php:468
+#: includes/class-payment-gateway.php:512
 #, php-format
 msgid "Awaiting %s payment"
 msgstr ""
 
-#: includes/class-payment-gateway.php:655
+#: includes/class-payment-gateway.php:699
 #, php-format
 msgid ""
 "Send exactly %1$s %2$s to:\n"
@@ -213,305 +214,320 @@ msgid ""
 "IMPORTANT: Include the memo exactly as shown."
 msgstr ""
 
-#: includes/class-payment-gateway.php:663
+#: includes/class-payment-gateway.php:707
 msgid "Payment Instructions"
 msgstr ""
 
-#: includes/class-payment-gateway.php:665
+#: includes/class-payment-gateway.php:709
 #: includes/templates/payment-instructions.php:109
 msgid "Amount:"
 msgstr ""
 
-#: includes/class-payment-gateway.php:666
+#: includes/class-payment-gateway.php:710
 msgid "Address:"
 msgstr ""
 
-#: includes/class-payment-gateway.php:667
+#: includes/class-payment-gateway.php:711
 msgid "Memo (TEXT):"
 msgstr ""
 
-#: includes/class-payment-gateway.php:668
+#: includes/class-payment-gateway.php:712
 #: includes/templates/payment-instructions.php:167
 msgid "IMPORTANT:"
 msgstr ""
 
-#: includes/class-payment-gateway.php:668
+#: includes/class-payment-gateway.php:712
 msgid "Include the memo exactly as shown."
 msgstr ""
 
-#: includes/class-payment-gateway.php:708
+#: includes/class-payment-gateway.php:751
 msgid "Checking payment status..."
 msgstr ""
 
-#: includes/class-payment-gateway.php:709
+#: includes/class-payment-gateway.php:752
 msgid "Payment received! Redirecting..."
 msgstr ""
 
-#: includes/class-payment-gateway.php:710
+#: includes/class-payment-gateway.php:753
 msgid "Payment window expired"
 msgstr ""
 
-#: includes/class-payment-gateway.php:711
+#: includes/class-payment-gateway.php:754
 msgid "Error checking payment"
 msgstr ""
 
-#: includes/class-payment-gateway.php:712
+#: includes/class-payment-gateway.php:755
 #: includes/templates/payment-instructions.php:78
 #: includes/templates/payment-instructions.php:195
 msgid "Check payment now"
 msgstr ""
 
-#: includes/class-payment-gateway.php:713
+#: includes/class-payment-gateway.php:756
 msgid "Checking now..."
 msgstr ""
 
-#: includes/class-payment-gateway.php:714
+#: includes/class-payment-gateway.php:757
 msgid "Verification complete."
 msgstr ""
 
-#: includes/class-payment-gateway.php:715
+#: includes/class-payment-gateway.php:758
 msgid "Payment not yet found on the network. Please try again shortly."
 msgstr ""
 
-#: includes/class-payment-gateway.php:716
+#: includes/class-payment-gateway.php:759
 msgid "Payment window ended; final verification pending."
 msgstr ""
 
-#: includes/class-payment-gateway.php:717
+#: includes/class-payment-gateway.php:760
 msgid "Please contact support if you made a payment."
 msgstr ""
 
-#: includes/class-payment-gateway.php:718
+#: includes/class-payment-gateway.php:761
 #: includes/templates/payment-instructions.php:68
 msgid "Transaction:"
 msgstr ""
 
-#: includes/class-payment-gateway.php:785
-#: includes/class-payment-gateway.php:801
-#: real8-gateway.php:462
-#: real8-gateway.php:481
+#: includes/class-payment-gateway.php:823
+#: includes/class-payment-gateway.php:839
+#: real8-gateway.php:500
+#: real8-gateway.php:519
 msgid "Payment window has expired; final verification pending"
 msgstr ""
 
-#: includes/class-payment-gateway.php:808
-#: real8-gateway.php:491
+#: includes/class-payment-gateway.php:846
+#: real8-gateway.php:529
 msgid "Payment window has expired"
 msgstr ""
 
-#: includes/class-payment-gateway.php:827
-#: real8-gateway.php:511
+#: includes/class-payment-gateway.php:865
+#: real8-gateway.php:549
 msgid "Payment monitor not available."
 msgstr ""
 
-#: includes/class-payment-gateway.php:840
-#: real8-gateway.php:444
-#: real8-gateway.php:524
+#: includes/class-payment-gateway.php:878
+#: real8-gateway.php:482
+#: real8-gateway.php:562
 msgid "Payment not found"
 msgstr ""
 
-#: includes/class-payment-gateway.php:871
+#: includes/class-payment-gateway.php:906
 msgid "REAL8 Payments is not configured."
 msgstr ""
 
-#: includes/class-payment-gateway.php:918
+#: includes/class-payment-gateway.php:953
 msgid "Checking wallet status..."
 msgstr ""
 
-#: includes/class-payment-gateway.php:919
+#: includes/class-payment-gateway.php:954
 msgid "Valid"
 msgstr ""
 
-#: includes/class-payment-gateway.php:920
-#: includes/class-payment-gateway.php:1094
+#: includes/class-payment-gateway.php:955
+#: includes/class-payment-gateway.php:1129
 msgid "Invalid address format. Stellar addresses are 56 characters starting with G."
 msgstr ""
 
-#: includes/class-payment-gateway.php:921
+#: includes/class-payment-gateway.php:956
 msgid "Save changes to check this wallet on Stellar."
 msgstr ""
 
 #. translators: %s: URL to wallet app
-#: includes/class-payment-gateway.php:974
+#: includes/class-payment-gateway.php:1009
 #, php-format
 msgid "If you don't have one, you can create a REAL8/Stellar Wallet at %s"
 msgstr ""
 
-#: includes/class-payment-gateway.php:980
+#: includes/class-payment-gateway.php:1015
 msgid "Once you have your Wallet, you can paste your public key (starts with G) above."
 msgstr ""
 
-#: includes/class-payment-gateway.php:983
+#: includes/class-payment-gateway.php:1018
 msgid "VERY IMPORTANT: If this is your first time creating a REAL8/Stellar account, remember to keep your Secret Key (it starts with S) in a safe place. If you lose it, you will not be able to recover your funds."
 msgstr ""
 
-#: includes/class-payment-gateway.php:1087
+#: includes/class-payment-gateway.php:1122
 msgid "No wallet address configured. Enter your Stellar public key above."
 msgstr ""
 
-#: includes/class-payment-gateway.php:1101
+#: includes/class-payment-gateway.php:1136
 msgid "Wallet not found on Stellar network. Make sure the account exists and is funded with at least 1 XLM."
 msgstr ""
 
-#: includes/class-payment-gateway.php:1108
+#: includes/class-payment-gateway.php:1143
 msgid "Could not verify wallet. Network error - please try again."
 msgstr ""
 
-#: includes/class-payment-gateway.php:1118
+#: includes/class-payment-gateway.php:1153
 msgid "Account exists on Stellar/REAL8"
 msgstr ""
 
 #. translators: 1: XLM balance, 2: REAL8 balance.
-#: includes/class-payment-gateway.php:1128
+#: includes/class-payment-gateway.php:1163
 #, php-format
 msgid "Funded with %1$s XLM and %2$s REAL8"
 msgstr ""
 
 #. translators: %s: XLM balance.
-#: includes/class-payment-gateway.php:1133
+#: includes/class-payment-gateway.php:1168
 #, php-format
 msgid "Low XLM balance: %s (recommend 1.5+ XLM)"
 msgstr ""
 
-#: includes/class-payment-gateway.php:1139
+#: includes/class-payment-gateway.php:1174
 msgid "Trustlines:"
 msgstr ""
 
 #. translators: 1: asset code, 2: token balance.
-#: includes/class-payment-gateway.php:1154
+#: includes/class-payment-gateway.php:1189
 #, php-format
 msgid "%1$s: %2$.2f balance"
 msgstr ""
 
 #. translators: %s: asset code.
-#: includes/class-payment-gateway.php:1156
+#: includes/class-payment-gateway.php:1191
 #, php-format
 msgid "%s: No trustline"
 msgstr ""
 
-#: includes/class-payment-gateway.php:1185
+#: includes/class-payment-gateway.php:1220
 msgid "Account ready to receive REAL8 payments"
 msgstr ""
 
 #. translators: %d: number of missing trustlines
-#: includes/class-payment-gateway.php:1192
+#: includes/class-payment-gateway.php:1227
 #, php-format
 msgid "Warning: %d enabled token(s) missing trustlines"
 msgstr ""
 
+#: includes/class-payment-monitor.php:184
+msgid "Payment verification is temporarily unavailable. Please try again shortly."
+msgstr ""
+
 #. translators: %s: Stellar transaction hash
-#: includes/class-payment-monitor.php:178
+#: includes/class-payment-monitor.php:247
 #, php-format
 msgid "Payment was confirmed on Stellar (TX: %s) but this order had not been completed. Completing it now."
 msgstr ""
 
-#: includes/class-payment-monitor.php:184
+#: includes/class-payment-monitor.php:253
 msgid "(not recorded)"
 msgstr ""
 
+#: includes/class-payment-monitor.php:260
+msgid "The order could not be completed automatically from its confirmed REAL8 payment. Review it manually."
+msgstr ""
+
+#. translators: 1: expected amount, 2: token code, 3: payment memo, 4: technical reason.
+#: includes/class-payment-monitor.php:319
+#, php-format
+msgid "Payment could NOT be verified on Stellar and automatic checks have stopped. Expected: %1$s %2$s. Memo: %3$s. Reason: %4$s. Check the merchant account for this memo before treating the order as unpaid."
+msgstr ""
+
 #. translators: 1: expected amount, 2: token code, 3: payment memo.
-#: includes/class-payment-monitor.php:239
+#: includes/class-payment-monitor.php:335
 #, php-format
 msgid "Payment EXPIRED. Expected: %1$s %2$s. Memo: %3$s. No matching payment found on Stellar network before deadline."
 msgstr ""
 
 #. translators: %s: token code
-#: includes/class-payment-monitor.php:249
+#: includes/class-payment-monitor.php:345
 #, php-format
 msgid "%s payment expired - no payment received within the time limit."
 msgstr ""
 
-#: includes/class-payment-monitor.php:282
+#: includes/class-payment-monitor.php:378
 msgid "Unable to record the payment transaction."
 msgstr ""
 
-#: includes/class-payment-monitor.php:300
+#: includes/class-payment-monitor.php:395
 msgid "Unable to save payment confirmation."
 msgstr ""
 
 #. translators: %s: previous order status
-#: includes/class-payment-monitor.php:331
+#: includes/class-payment-monitor.php:426
 #, php-format
 msgid "Payment found on Stellar after the order had been marked \"%s\", reviving the order."
 msgstr ""
 
 #. translators: 1: amount, 2: token code, 3: tx hash, 4: sender address
-#: includes/class-payment-monitor.php:339
+#: includes/class-payment-monitor.php:434
 #, php-format
 msgid "%1$s %2$s payment confirmed! TX: %3$s. From: %4$s"
 msgstr ""
 
-#: includes/class-payment-monitor.php:357
+#: includes/class-payment-monitor.php:452
 msgid "REAL8 payment received, but the order changed after quoting. Review the payment before fulfilling this order."
 msgstr ""
 
-#: includes/class-payment-monitor.php:441
-#: includes/class-payment-monitor.php:470
+#: includes/class-payment-monitor.php:536
+#: includes/class-payment-monitor.php:565
 msgid "Stellar Payment Gateway:"
 msgstr ""
 
 #. translators: 1: opening settings link, 2: closing link.
-#: includes/class-payment-monitor.php:445
+#: includes/class-payment-monitor.php:540
 #, php-format
 msgid "Payment gateway is enabled but no merchant address is configured. %1$sGo to settings%2$s"
 msgstr ""
 
 #. translators: %d: number of pending payments.
-#: includes/class-payment-monitor.php:474
+#: includes/class-payment-monitor.php:569
 #, php-format
 msgid "%d pending Stellar payment is about to expire."
 msgid_plural "%d pending Stellar payments are about to expire."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/class-payment-monitor.php:506
+#: includes/class-payment-monitor.php:601
 msgid "No Stellar payment record found for this order"
 msgstr ""
 
-#: includes/class-payment-monitor.php:515
+#: includes/class-payment-monitor.php:610
 msgid "This order has already been paid"
 msgstr ""
 
-#: includes/class-payment-monitor.php:519
+#: includes/class-payment-monitor.php:614
 msgid "This payment has expired"
 msgstr ""
 
-#: includes/class-payment-monitor.php:524
+#: includes/class-payment-monitor.php:619
 msgid "Payment verification is pending. Please try again shortly."
 msgstr ""
 
-#: includes/class-payment-monitor.php:536
+#: includes/class-payment-monitor.php:631
 msgid "Merchant address not configured"
 msgstr ""
 
 #: includes/class-stellar-payment-api.php:143
+#: includes/class-stellar-payment-api.php:225
 msgid "Invalid response from Stellar."
 msgstr ""
 
-#: includes/class-stellar-payment-api.php:215
+#: includes/class-stellar-payment-api.php:231
 msgid "Stellar history verification is incomplete. Please reconcile this payment manually."
 msgstr ""
 
-#: includes/class-stellar-payment-api.php:321
+#: includes/class-stellar-payment-api.php:335
 msgid "Unknown payment token."
 msgstr ""
 
-#: includes/class-stellar-payment-api.php:325
+#: includes/class-stellar-payment-api.php:339
 msgid "Configure and enable REAL8 Payments before requesting prices."
 msgstr ""
 
-#: includes/class-stellar-payment-api.php:342
+#: includes/class-stellar-payment-api.php:356
 msgid "The pricing service returned an invalid price."
 msgstr ""
 
-#: includes/class-stellar-payment-api.php:524
+#: includes/class-stellar-payment-api.php:538
 msgid "The payment total must be greater than zero."
 msgstr ""
 
-#: includes/class-stellar-payment-api.php:640
+#: includes/class-stellar-payment-api.php:657
 msgid "Invalid payment response from Stellar."
 msgstr ""
 
-#: includes/class-stellar-payment-api.php:718
+#: includes/class-stellar-payment-api.php:743
 msgid "Invalid Stellar transaction hash."
 msgstr ""
 
@@ -633,27 +649,23 @@ msgstr ""
 msgid "REAL8 Gateway requires WooCommerce to be installed and active."
 msgstr ""
 
-#: real8-gateway.php:206
+#: real8-gateway.php:230
 msgid "Settings"
 msgstr ""
 
-#: real8-gateway.php:417
-#: real8-gateway.php:427
+#: real8-gateway.php:457
+#: real8-gateway.php:465
 msgid "Invalid order"
 msgstr ""
 
-#: real8-gateway.php:422
-msgid "Order not found"
-msgstr ""
-
-#: real8-gateway.php:432
+#: real8-gateway.php:470
 msgid "Invalid payment method"
 msgstr ""
 
-#: real8-gateway.php:549
+#: real8-gateway.php:587
 msgid "Every Minute"
 msgstr ""
 
-#: real8-gateway.php:584
+#: real8-gateway.php:622
 msgid "REAL8 Total:"
 msgstr ""
