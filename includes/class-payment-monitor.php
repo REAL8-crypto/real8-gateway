@@ -9,6 +9,10 @@
  * @version 3.0.0
  */
 
+// Payment records use plugin-owned tables; WooCommerce CRUD handles orders.
+// Verification and atomic claims require fresh reads; caching could settle stale rows.
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -46,8 +50,7 @@ class REAL8_Payment_Monitor {
         $this->repair_confirmed_rows();
 
         // Get all pending payments
-        $pending = $wpdb->get_results(
-            "SELECT * FROM $table WHERE status = 'pending' ORDER BY created_at ASC"
+        $pending = $wpdb->get_results($wpdb->prepare("SELECT * FROM %i WHERE status = 'pending' ORDER BY created_at ASC", $table)
         );
 
         if (empty($pending)) {
@@ -58,11 +61,11 @@ class REAL8_Payment_Monitor {
         $default_merchant_address = isset($gateway_settings['merchant_address']) ? (string) $gateway_settings['merchant_address'] : '';
 
         if (empty($default_merchant_address)) {
-            error_log('REAL8 Gateway: No merchant address configured');
+            real8_gateway_log('REAL8 Gateway: No merchant address configured');
             return;
         }
 
-foreach ($pending as $payment) {
+        foreach ($pending as $payment) {
             $merchant_for_payment = !empty($payment->merchant_address) ? (string) $payment->merchant_address : $default_merchant_address;
             $this->check_single_payment($payment, $merchant_for_payment);
         }
@@ -99,7 +102,7 @@ foreach ($pending as $payment) {
 
         if (is_wp_error($result)) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('REAL8 Gateway: check_single_payment error: ' . $result->get_error_message());
+                real8_gateway_log('REAL8 Gateway: check_single_payment error: ' . $result->get_error_message());
             }
             // Never expire on a failed lookup — a Horizon hiccup at the
             // deadline must not discard a possibly-settled payment.
@@ -138,12 +141,11 @@ foreach ($pending as $payment) {
         global $wpdb;
         $table = $wpdb->prefix . 'real8_payments';
 
-        $rows = $wpdb->get_results(
-            "SELECT * FROM $table
+        $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM %i
              WHERE status = 'confirmed'
                AND stellar_tx_hash IS NOT NULL AND stellar_tx_hash <> ''
                AND paid_at >= (UTC_TIMESTAMP() - INTERVAL 30 DAY)
-             ORDER BY paid_at ASC"
+             ORDER BY paid_at ASC", $table)
         );
         if (empty($rows)) {
             return 0;
@@ -166,7 +168,7 @@ foreach ($pending as $payment) {
      */
     private function repair_confirmed_row($payment) {
         $order = wc_get_order($payment->order_id);
-        if (!$order || $order->is_paid()) {
+        if (!$order || $order->is_paid() || $order->has_status('refunded') || $order->get_meta('_real8_manual_review')) {
             return false;
         }
 
@@ -183,7 +185,7 @@ foreach ($pending as $payment) {
             'created_at' => $payment->paid_at,
         ), $asset_code);
 
-        error_log(sprintf('REAL8 Gateway: repaired order #%d from confirmed payment row %d (TX: %s)', (int) $payment->order_id, (int) $payment->id, $payment->stellar_tx_hash));
+        real8_gateway_log(sprintf('REAL8 Gateway: repaired order #%d from confirmed payment row %d (TX: %s)', (int) $payment->order_id, (int) $payment->id, $payment->stellar_tx_hash));
         return true;
     }
 
@@ -214,11 +216,12 @@ foreach ($pending as $payment) {
         $table = $wpdb->prefix . 'real8_payments';
 
         $claimed = $wpdb->query($wpdb->prepare(
-            "UPDATE $table SET status = 'expired' WHERE id = %d AND status = 'pending'",
+            "UPDATE %i SET status = 'expired' WHERE id = %d AND status = 'pending'",
+            $table,
             $payment->id
         ));
         if ($claimed === 0 || $claimed === false) {
-            error_log(sprintf('REAL8 Gateway: not expiring payment row %d (order #%d), it is no longer pending', (int) $payment->id, (int) $payment->order_id));
+            real8_gateway_log(sprintf('REAL8 Gateway: not expiring payment row %d (order #%d), it is no longer pending', (int) $payment->id, (int) $payment->order_id));
             return false;
         }
 
@@ -232,6 +235,7 @@ foreach ($pending as $payment) {
         if ($order && $order->has_status('pending')) {
             // Add detailed expiration note
             $order->add_order_note(sprintf(
+                /* translators: 1: expected amount, 2: token code, 3: payment memo. */
                 __('Payment EXPIRED. Expected: %1$s %2$s. Memo: %3$s. No matching payment found on Stellar network before deadline.', 'real8-gateway'),
                 number_format($amount, 7),
                 $asset_code,
@@ -248,7 +252,7 @@ foreach ($pending as $payment) {
             );
         }
 
-        error_log(sprintf('REAL8 Gateway: Payment expired for order #%d (%s)', $payment->order_id, $asset_code));
+        real8_gateway_log(sprintf('REAL8 Gateway: Payment expired for order #%d (%s)', $payment->order_id, $asset_code));
         return true;
     }
 
@@ -263,33 +267,44 @@ foreach ($pending as $payment) {
         global $wpdb;
         $table = $wpdb->prefix . 'real8_payments';
         $tx_hash = isset($result['tx_hash']) ? strtolower((string) $result['tx_hash']) : '';
+        if (!preg_match('/^[a-f0-9]{64}$/', $tx_hash)) {
+            return false;
+        }
 
-        // A transaction hash can settle exactly one payment row. If another row
-        // already carries it (old on-chain payment with a reused memo, reopened
-        // order), refuse instead of confirming twice (audit 2026-08-19, WP-10).
-        if ($tx_hash !== '') {
-            $other = $wpdb->get_var($wpdb->prepare(
-                "SELECT id FROM $table WHERE stellar_tx_hash = %s AND id <> %d LIMIT 1",
-                $tx_hash, $payment->id
-            ));
-            if ($other) {
-                error_log(sprintf('REAL8 Gateway: tx %s already confirmed payment row %d, not confirming row %d (order %d)', $tx_hash, (int) $other, (int) $payment->id, (int) $payment->order_id));
-                return;
-            }
+        // The primary key makes ownership atomic even across simultaneous workers.
+        // Claims survive replacement of a payment row and a PHP interruption.
+        $claims_table = $wpdb->prefix . 'real8_transaction_claims';
+        $inserted = $wpdb->query($wpdb->prepare(
+            "INSERT IGNORE INTO %i (tx_hash, payment_id) VALUES (%s, %d)",
+            $claims_table, $tx_hash, $payment->id
+        ));
+        if ($inserted === false) {
+            return new WP_Error('claim_failed', __('Unable to record the payment transaction.', 'real8-gateway'));
+        }
+        $owner = $wpdb->get_var($wpdb->prepare(
+            "SELECT payment_id FROM %i WHERE tx_hash = %s", $claims_table, $tx_hash
+        ));
+        if ((int) $owner !== (int) $payment->id) {
+            return false;
         }
 
         // Atomic claim: cron and the browser-side check can both find the
         // payment; only the one that flips the row proceeds to payment_complete
         // (audit 2026-08-19, WP-11).
         $claimed = $wpdb->query($wpdb->prepare(
-            "UPDATE $table SET status = 'confirmed', stellar_tx_hash = %s, paid_at = %s WHERE id = %d AND status <> 'confirmed'",
+            "UPDATE %i SET status = 'confirmed', stellar_tx_hash = %s, paid_at = %s WHERE id = %d AND status <> 'confirmed'",
+            $table,
             $tx_hash, current_time('mysql', true), $payment->id
         ));
-        if ($claimed === 0 || $claimed === false) {
-            return;
+        if ($claimed === false) {
+            return new WP_Error('confirmation_failed', __('Unable to save payment confirmation.', 'real8-gateway'));
+        }
+        if ($claimed === 0) {
+            return false;
         }
 
         $this->finalize_confirmed_order($payment, $result, $asset_code);
+        return true;
     }
 
     /**
@@ -335,6 +350,18 @@ foreach ($pending as $payment) {
             $order->update_meta_data('_stellar_from_address', $result['from']);
             $order->update_meta_data('_stellar_paid_at', $result['created_at']);
 
+            // A quote covers the order total and currency saved with the payment.
+            // Editing the order after quoting requires reconciliation, not automatic fulfilment.
+            if ($order->get_currency() !== 'USD' || $order->get_payment_method() !== 'real8_payment' || abs((float) $order->get_total() - (float) $payment->amount_usd) > 0.005) {
+                $order->update_meta_data('_real8_manual_review', 'yes');
+                $order->add_order_note(__('REAL8 payment received, but the order changed after quoting. Review the payment before fulfilling this order.', 'real8-gateway'));
+                if (!$order->is_paid() && !$order->has_status('refunded')) {
+                    $order->update_status('on-hold');
+                }
+                $order->save();
+                return;
+            }
+
             // Mark as processing (or completed depending on settings)
             $order->payment_complete($result['tx_hash']);
             $order->save();
@@ -344,7 +371,7 @@ foreach ($pending as $payment) {
             // a failure only logs, the order is already complete.
             $this->notify_intent_paid($order, $result['tx_hash']);
 
-            error_log(sprintf(
+            real8_gateway_log(sprintf(
                 'REAL8 Gateway: %s payment confirmed for order #%d - TX: %s',
                 $asset_code,
                 $payment->order_id,
@@ -362,6 +389,10 @@ foreach ($pending as $payment) {
      * @param string   $tx_hash Stellar transaction hash
      */
     private function notify_intent_paid($order, $tx_hash) {
+        $settings = get_option('woocommerce_real8_payment_settings', array());
+        if (($settings['payment_intents'] ?? 'no') !== 'yes') {
+            return;
+        }
         $intent_id = $order->get_meta('_real8_intent_id');
         if (empty($intent_id) || !defined('REAL8_PAYMENT_INTENT_SECRET') || REAL8_PAYMENT_INTENT_SECRET === '') {
             return;
@@ -385,7 +416,7 @@ foreach ($pending as $payment) {
 
         if (is_wp_error($response) || !in_array(wp_remote_retrieve_response_code($response), array(200, 409), true)) {
             $err = is_wp_error($response) ? $response->get_error_message() : wp_remote_retrieve_body($response);
-            error_log(sprintf('REAL8 Gateway: failed to mark intent %s paid: %s', $intent_id, $err));
+            real8_gateway_log(sprintf('REAL8 Gateway: failed to mark intent %s paid: %s', $intent_id, $err));
         }
     }
 
@@ -395,7 +426,8 @@ foreach ($pending as $payment) {
     public function admin_notices() {
         // Only show on WooCommerce pages
         $screen = get_current_screen();
-        if (!$screen || strpos($screen->id, 'woocommerce') === false) {
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only notice scope.
+        if (!current_user_can('manage_woocommerce') || !$screen || $screen->id !== 'woocommerce_page_wc-settings' || !isset($_GET['section']) || sanitize_key(wp_unslash($_GET['section'])) !== 'real8_payment') {
             return;
         }
 
@@ -409,7 +441,8 @@ foreach ($pending as $payment) {
                         <strong><?php esc_html_e('Stellar Payment Gateway:', 'real8-gateway'); ?></strong>
                         <?php
                         printf(
-                            esc_html__('Payment gateway is enabled but no merchant address is configured. %sGo to settings%s', 'real8-gateway'),
+                            /* translators: 1: opening settings link, 2: closing link. */
+                            esc_html__('Payment gateway is enabled but no merchant address is configured. %1$sGo to settings%2$s', 'real8-gateway'),
                             '<a href="' . esc_url(admin_url('admin.php?page=wc-settings&tab=checkout&section=real8_payment')) . '">',
                             '</a>'
                         );
@@ -424,11 +457,10 @@ foreach ($pending as $payment) {
         global $wpdb;
         $table = $wpdb->prefix . 'real8_payments';
 
-        $expiring_soon = $wpdb->get_var(
-            "SELECT COUNT(*) FROM $table
+        $expiring_soon = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM %i
              WHERE status = 'pending'
              AND expires_at < DATE_ADD(NOW(), INTERVAL 5 MINUTE)
-             AND expires_at > NOW()"
+             AND expires_at > NOW()", $table)
         );
 
         if ($expiring_soon > 0) {
@@ -438,13 +470,14 @@ foreach ($pending as $payment) {
                     <strong><?php esc_html_e('Stellar Payment Gateway:', 'real8-gateway'); ?></strong>
                     <?php
                     printf(
+                        /* translators: %d: number of pending payments. */
                         esc_html(_n(
                             '%d pending Stellar payment is about to expire.',
                             '%d pending Stellar payments are about to expire.',
                             $expiring_soon,
                             'real8-gateway'
                         )),
-                        $expiring_soon
+                        esc_html($expiring_soon)
                     );
                     ?>
                 </p>
@@ -464,7 +497,8 @@ foreach ($pending as $payment) {
         $table = $wpdb->prefix . 'real8_payments';
 
         $payment = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM $table WHERE order_id = %d",
+            "SELECT * FROM %i WHERE order_id = %d",
+            $table,
             $order_id
         ));
 
@@ -484,6 +518,12 @@ foreach ($pending as $payment) {
         if ($payment->status === 'expired') {
             return new WP_Error('expired', __('This payment has expired', 'real8-gateway'));
         }
+
+        $lock_key = 'real8_manual_check_lock_' . absint($order_id);
+        if (get_transient($lock_key)) {
+            return new WP_Error('verification_throttled', __('Payment verification is pending. Please try again shortly.', 'real8-gateway'));
+        }
+        set_transient($lock_key, 1, 20);
 
         $gateway_settings = get_option('woocommerce_real8_payment_settings');
         // Prefer the address stored with this payment record (future-proof if settings change)
@@ -518,8 +558,7 @@ foreach ($pending as $payment) {
         }
 
         if ($result) {
-            $this->mark_payment_confirmed($payment, $result, $asset_code);
-            return true;
+            return $this->mark_payment_confirmed($payment, $result, $asset_code);
         }
 
         return false;
@@ -527,10 +566,10 @@ foreach ($pending as $payment) {
 
     /**
      * A matching on-chain tx must not predate the payment row by more than a
-     * day. The memo is reused across payment rows of the same order, so an old
+     * minute. The memo is reused across payment rows of the same order, so an old
      * (e.g. already refunded) transaction could otherwise confirm a new row
-     * (audit 2026-08-19, WP-10). The 24 h margin absorbs any timezone offset
-     * between the DB timestamp and Horizon's UTC timestamps.
+     * Both the database row and Horizon timestamps are UTC; a one-minute
+     * allowance covers clock skew without admitting yesterday's payments.
      *
      * @param object $payment Payment row
      * @param array  $result  check_payment() result (has created_at from Horizon)
@@ -540,10 +579,10 @@ foreach ($pending as $payment) {
         $row_ts = isset($payment->created_at) ? strtotime((string) $payment->created_at) : false;
         $tx_ts  = isset($result['created_at']) ? strtotime((string) $result['created_at']) : false;
         if (!$row_ts || !$tx_ts) {
-            return true; // cannot judge, keep previous behaviour
+            return false;
         }
-        if ($tx_ts < $row_ts - DAY_IN_SECONDS) {
-            error_log(sprintf('REAL8 Gateway: ignoring tx %s dated %s for payment row %d created %s (too old)', isset($result['tx_hash']) ? $result['tx_hash'] : '?', (string) $result['created_at'], (int) $payment->id, (string) $payment->created_at));
+        if ($tx_ts < $row_ts - 60) {
+            real8_gateway_log(sprintf('REAL8 Gateway: ignoring tx %s dated %s for payment row %d created %s (too old)', isset($result['tx_hash']) ? $result['tx_hash'] : '?', (string) $result['created_at'], (int) $payment->id, (string) $payment->created_at));
             return false;
         }
         return true;
@@ -558,7 +597,7 @@ foreach ($pending as $payment) {
         global $wpdb;
         $table = $wpdb->prefix . 'real8_payments';
 
-        return (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE status = 'pending'");
+        return (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM %i WHERE status = 'pending'", $table));
     }
 
     /**
@@ -580,8 +619,7 @@ foreach ($pending as $payment) {
         );
 
         // Overall counts
-        $counts = $wpdb->get_results(
-            "SELECT status, COUNT(*) as count FROM $table GROUP BY status"
+        $counts = $wpdb->get_results($wpdb->prepare("SELECT status, COUNT(*) as count FROM %i GROUP BY status", $table)
         );
 
         foreach ($counts as $row) {
@@ -590,14 +628,13 @@ foreach ($pending as $payment) {
         }
 
         // Per-token statistics
-        $token_stats = $wpdb->get_results(
-            "SELECT asset_code,
+        $token_stats = $wpdb->get_results($wpdb->prepare("SELECT asset_code,
                     COUNT(*) as total_count,
                     SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as confirmed_count,
                     SUM(CASE WHEN status = 'confirmed' THEN amount_token ELSE 0 END) as total_received,
                     SUM(CASE WHEN status = 'confirmed' THEN amount_usd ELSE 0 END) as total_usd
-             FROM $table
-             GROUP BY asset_code"
+             FROM %i
+             GROUP BY asset_code", $table)
         );
 
         foreach ($token_stats as $row) {

@@ -87,6 +87,8 @@ class REAL8_Stellar_Payment_API {
             return $this->normalize_dec('0', $scale);
         }
 
+        $min_abs = $this->normalize_dec(min(max(0.0, (float) $min_abs), (float) $expected_amount * 0.05), $scale);
+
         $tol_pct = $this->normalize_dec(((float) $expected_amount) * max(0.0, $percent) / 100.0, $scale);
 
         return ($this->dec_compare($tol_pct, $min_abs, $scale) >= 0) ? $tol_pct : $min_abs;
@@ -117,7 +119,7 @@ class REAL8_Stellar_Payment_API {
 
         if (is_wp_error($response)) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('REAL8 Gateway: Horizon request error: ' . $response->get_error_message() . ' URL: ' . $url);
+                real8_gateway_log('REAL8 Gateway: Horizon request error: ' . $response->get_error_message() . ' URL: ' . $url);
             }
             return new WP_Error('horizon_error', $response->get_error_message());
         }
@@ -127,7 +129,7 @@ class REAL8_Stellar_Payment_API {
 
         if ($code !== 200) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('REAL8 Gateway: Horizon status ' . $code . ' URL: ' . $url . ' BODY: ' . substr($body, 0, 300));
+                real8_gateway_log('REAL8 Gateway: Horizon status ' . $code . ' URL: ' . $url . ' BODY: ' . substr($body, 0, 300));
             }
             return new WP_Error('horizon_status', 'Horizon returned HTTP ' . $code);
         }
@@ -135,6 +137,11 @@ class REAL8_Stellar_Payment_API {
         $data = json_decode($body, true);
         if (!is_array($data)) {
             return new WP_Error('horizon_json', 'Invalid JSON from Horizon');
+        }
+        if (strpos($url, '/transactions?') !== false || strpos($url, '/operations?') !== false) {
+            if (!isset($data['_embedded']['records']) || !is_array($data['_embedded']['records'])) {
+                return new WP_Error('horizon_json', __('Invalid response from Stellar.', 'real8-gateway'));
+            }
         }
         return $data;
     }
@@ -149,13 +156,8 @@ class REAL8_Stellar_Payment_API {
         $expected_amount = is_string($expected_amount) ? trim($expected_amount) : (string) $expected_amount;
 
         // Apply tolerance by reducing the minimum acceptable amount.
-        $min_expected = $this->min_expected_with_tolerance($expected_amount, 7);
-        $is_native = REAL8_Token_Registry::is_native($asset_code);
-
         $cursor = null;
         $pages = 0;
-        $found_tx = null;
-        $tx_hash = '';
 
         while ($pages < 5) {
             $params = array('order' => 'desc', 'limit' => 200);
@@ -175,12 +177,11 @@ class REAL8_Stellar_Payment_API {
             }
 
             foreach ($records as $tx) {
-                if (isset($tx['successful']) && !$tx['successful']) {
+                // Settlement requires a successful transaction with a text memo.
+                if (($tx['successful'] ?? false) !== true) {
                     continue;
                 }
-
-                // Only consider text memos
-                if (isset($tx['memo_type']) && (string) $tx['memo_type'] !== 'text') {
+                if (!isset($tx['memo_type']) || (string) $tx['memo_type'] !== 'text') {
                     continue;
                 }
 
@@ -194,8 +195,10 @@ class REAL8_Stellar_Payment_API {
                     continue;
                 }
 
-                $found_tx = $tx;
-                break 2;
+                $result = $this->verify_transaction_operations($tx, $merchant_address, $expected_amount, $asset_code, $asset_issuer);
+                if ($result !== false) {
+                    return $result;
+                }
             }
 
             // paginate using last paging_token
@@ -208,10 +211,17 @@ class REAL8_Stellar_Payment_API {
             $pages++;
         }
 
-        if (!$found_tx || !$tx_hash) {
-            return false;
+        if ($pages >= 5 && $cursor) {
+            return new WP_Error('scan_limit', __('Stellar history verification is incomplete. Please reconcile this payment manually.', 'real8-gateway'));
         }
+        return false;
+    }
 
+    /** Verify the destination asset and amount in a memo-matched transaction. */
+    private function verify_transaction_operations($found_tx, $merchant_address, $expected_amount, $asset_code, $asset_issuer) {
+        $tx_hash = (string) $found_tx['hash'];
+        $is_native = REAL8_Token_Registry::is_native($asset_code);
+        $min_expected = $this->min_expected_with_tolerance($expected_amount, 7);
         // Fetch operations for the matching tx and find the payment op to the merchant
         $ops_url = REAL8_GW_HORIZON_URL . '/transactions/' . rawurlencode($tx_hash) . '/operations?order=asc&limit=200';
         $ops_data = $this->horizon_get_json($ops_url, 15);
@@ -256,10 +266,7 @@ class REAL8_Stellar_Payment_API {
 
             // Amount: prefer 'amount' (destination amount).
             $candidate = isset($op['amount']) ? (string) $op['amount'] : '';
-            if (!$candidate && isset($op['source_amount'])) {
-                $candidate = (string) $op['source_amount'];
-            }
-            if (!$candidate) {
+            if (!is_numeric($candidate) || !is_finite((float) $candidate) || (float) $candidate <= 0) {
                 continue;
             }
 
@@ -282,12 +289,13 @@ class REAL8_Stellar_Payment_API {
     }
 
 
+
     private static $instance = null;
 
     /**
      * Cache duration for prices (5 minutes)
      */
-    const PRICE_CACHE_DURATION = 300;
+    const PRICE_CACHE_DURATION = 60;
 
     public static function get_instance() {
         if (null === self::$instance) {
@@ -309,44 +317,32 @@ class REAL8_Stellar_Payment_API {
      */
     public function get_token_price($token_code, $force_refresh = false) {
         $token_code = strtoupper($token_code);
+        if (!REAL8_Token_Registry::get_token($token_code)) {
+            return new WP_Error('invalid_token', __('Unknown payment token.', 'real8-gateway'));
+        }
+        $settings = get_option('woocommerce_real8_payment_settings', array());
+        if (($settings['enabled'] ?? 'no') !== 'yes' || empty($settings['merchant_address'])) {
+            return new WP_Error('not_configured', __('Configure and enable REAL8 Payments before requesting prices.', 'real8-gateway'));
+        }
         $cache_key = 'stellar_gw_price_' . $token_code;
-
-        // Check cache first
         if (!$force_refresh) {
             $cached = get_transient($cache_key);
-            if ($cached !== false) {
+            if (is_numeric($cached) && is_finite((float) $cached) && (float) $cached > 0) {
                 return (float) $cached;
             }
         }
-
-        // Fetch price based on token source
-        if (REAL8_Token_Registry::is_api_priced($token_code)) {
-            $price = $this->fetch_price_from_api($token_code);
-        } else {
-            $price = $this->fetch_price_from_horizon($token_code);
-        }
-
+        $price = REAL8_Token_Registry::is_api_priced($token_code)
+            ? $this->fetch_price_from_api($token_code)
+            : $this->fetch_price_from_horizon($token_code);
+        // A stale or invented rate must never determine a customer's payment.
         if (is_wp_error($price)) {
-            // Try to return last known good price
-            $last_price = get_option('stellar_gw_last_price_' . $token_code);
-            if ($last_price) {
-                return (float) $last_price;
-            }
-
-            // Try fallback price
-            $fallback_prices = REAL8_Token_Registry::get_fallback_prices();
-            if (isset($fallback_prices[$token_code])) {
-                return (float) $fallback_prices[$token_code];
-            }
-
-            return $price; // Return the error
+            return $price;
         }
-
-        // Cache the price
-        set_transient($cache_key, $price, self::PRICE_CACHE_DURATION);
-        update_option('stellar_gw_last_price_' . $token_code, $price);
-
-        return $price;
+        if (!is_numeric($price) || !is_finite((float) $price) || (float) $price <= 0) {
+            return new WP_Error('invalid_price', __('The pricing service returned an invalid price.', 'real8-gateway'));
+        }
+        set_transient($cache_key, (float) $price, self::PRICE_CACHE_DURATION);
+        return (float) $price;
     }
 
     /**
@@ -405,16 +401,16 @@ class REAL8_Stellar_Payment_API {
         switch ($token_code) {
             case 'REAL8':
                 if (isset($data['REAL8_USDC']['priceInUSD'])) {
-                    return (float) $data['REAL8_USDC']['priceInUSD'];
+                    return $data['REAL8_USDC']['priceInUSD'];
                 }
                 if (isset($data['REAL8']['priceInUSD'])) {
-                    return (float) $data['REAL8']['priceInUSD'];
+                    return $data['REAL8']['priceInUSD'];
                 }
                 break;
 
             case 'XLM':
                 if (isset($data['XLM']['priceInUSD'])) {
-                    return (float) $data['XLM']['priceInUSD'];
+                    return $data['XLM']['priceInUSD'];
                 }
                 // XLM might need to be calculated from USDC rate
                 break;
@@ -440,8 +436,7 @@ class REAL8_Stellar_Payment_API {
         // First get XLM/USD price
         $xlm_usd = $this->get_token_price('XLM');
         if (is_wp_error($xlm_usd)) {
-            // Use fallback XLM price
-            $xlm_usd = 0.45;
+            return $xlm_usd;
         }
 
         // Get TOKEN/XLM price from orderbook
@@ -525,8 +520,12 @@ class REAL8_Stellar_Payment_API {
             return $price;
         }
 
-        // Apply price buffer (customers pay slightly more to account for volatility)
-        $buffer_multiplier = $include_buffer ? (1 - (REAL8_GW_PRICE_BUFFER_PERCENT / 100)) : 1;
+        if (!is_numeric($usd_amount) || !is_finite((float) $usd_amount) || (float) $usd_amount <= 0) {
+            return new WP_Error('invalid_amount', __('The payment total must be greater than zero.', 'real8-gateway'));
+        }
+        $settings = get_option('woocommerce_real8_payment_settings', array());
+        $buffer = max(0.0, min(10.0, (float) ($settings['price_buffer'] ?? REAL8_GW_PRICE_BUFFER_PERCENT)));
+        $buffer_multiplier = $include_buffer ? (1 - ($buffer / 100)) : 1;
         $effective_price = $price * $buffer_multiplier;
 
         $token_amount = $usd_amount / $effective_price;
@@ -537,7 +536,7 @@ class REAL8_Stellar_Payment_API {
             'usd_amount' => $usd_amount,
             'price_per_token' => $price,
             'effective_price' => $effective_price,
-            'buffer_percent' => REAL8_GW_PRICE_BUFFER_PERCENT,
+            'buffer_percent' => $buffer,
         );
     }
 
@@ -579,8 +578,8 @@ class REAL8_Stellar_Payment_API {
     public function generate_payment_memo($order_id) {
         // Format: S-{order_id}-{random} (S for Stellar, generic)
         // Keep it short for Stellar text memo limit (28 chars)
-        $random = substr(md5(uniqid(mt_rand(), true)), 0, 6);
-        return 'S-' . $order_id . '-' . $random;
+        $random = substr(str_replace('-', '', wp_generate_uuid4()), 0, 12);
+        return 'S-' . substr((string) absint($order_id), -12) . '-' . $random;
     }
 
     /**
@@ -595,6 +594,14 @@ class REAL8_Stellar_Payment_API {
      * @return array|false Payment details or false if not found
      */
     public function check_payment($merchant_address, $memo, $expected_amount, $asset_code = 'REAL8', $asset_issuer = null, $since_cursor = null) {
+        $token = REAL8_Token_Registry::get_token($asset_code);
+        if (!$token || !$this->validate_stellar_address($merchant_address) || !is_numeric($expected_amount) || !is_finite((float) $expected_amount) || (float) $expected_amount <= 0) {
+            return new WP_Error('invalid_payment', __('Invalid token configuration.', 'real8-gateway'));
+        }
+        $asset_issuer = $asset_issuer ?: $token['issuer'];
+        if (!REAL8_Token_Registry::validate_token($asset_code, $asset_issuer)) {
+            return new WP_Error('invalid_asset', __('Invalid token configuration.', 'real8-gateway'));
+        }
         // Robust implementation: check recent transactions first (memo available directly).
         $result = $this->check_payment_via_transactions($merchant_address, $memo, $expected_amount, $asset_code, $asset_issuer);
 
@@ -625,29 +632,12 @@ class REAL8_Stellar_Payment_API {
 
         $url .= '?' . http_build_query($params);
 
-        $response = wp_remote_get($url, array(
-            'timeout' => 15,
-            'headers' => array(
-                'Accept' => 'application/json',
-            ),
-        ));
-
-        if (is_wp_error($response)) {
-            error_log('Stellar Gateway: Failed to check payments: ' . $response->get_error_message());
-            return false;
+        $data = $this->horizon_get_json($url, 15);
+        if (is_wp_error($data)) {
+            return $data;
         }
-
-        $code = wp_remote_retrieve_response_code($response);
-        if ($code !== 200) {
-            error_log('Stellar Gateway: Horizon API returned status ' . $code);
-            return false;
-        }
-
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
-
-        if (!isset($data['_embedded']['records'])) {
-            return false;
+        if (!isset($data['_embedded']['records']) || !is_array($data['_embedded']['records'])) {
+            return new WP_Error('horizon_json', __('Invalid payment response from Stellar.', 'real8-gateway'));
         }
 
         // Determine if we're looking for native XLM or a credit asset
@@ -656,7 +646,7 @@ class REAL8_Stellar_Payment_API {
         // Look through payments for matching memo and amount
         foreach ($data['_embedded']['records'] as $payment) {
             // Only process payment operations
-            if ($payment['type'] !== 'payment') {
+            if (($payment['type'] ?? '') !== 'payment' || ($payment['to'] ?? '') !== $merchant_address) {
                 continue;
             }
 
@@ -681,7 +671,10 @@ class REAL8_Stellar_Payment_API {
             $tx_hash = $payment['transaction_hash'];
             $tx_details = $this->get_transaction_details($tx_hash);
 
-            if (!$tx_details) {
+            if (is_wp_error($tx_details)) {
+                return $tx_details;
+            }
+            if (empty($tx_details['successful']) || ($tx_details['memo_type'] ?? '') !== 'text') {
                 continue;
             }
 
@@ -693,6 +686,9 @@ class REAL8_Stellar_Payment_API {
 
             // Check amount against minimum acceptable (expected minus configured tolerance)
             $min_expected = $this->min_expected_with_tolerance($expected_amount, 7);
+            if (!isset($payment['amount']) || !is_numeric($payment['amount']) || !is_finite((float) $payment['amount']) || (float) $payment['amount'] <= 0) {
+                continue;
+            }
             $candidate_plus = $this->dec_add_tol((string) $payment['amount'], '0.000001', 7);
 
             if ($this->dec_compare($candidate_plus, $min_expected, 7) >= 0) {
@@ -718,28 +714,10 @@ class REAL8_Stellar_Payment_API {
      * @return array|false Transaction details or false
      */
     public function get_transaction_details($tx_hash) {
-        $url = REAL8_GW_HORIZON_URL . '/transactions/' . $tx_hash;
-
-        $response = wp_remote_get($url, array(
-            'timeout' => 10,
-            'headers' => array(
-                'Accept' => 'application/json',
-            ),
-        ));
-
-        if (is_wp_error($response)) {
-            return false;
+        if (!is_string($tx_hash) || !preg_match('/^[a-f0-9]{64}$/i', $tx_hash)) {
+            return new WP_Error('invalid_transaction', __('Invalid Stellar transaction hash.', 'real8-gateway'));
         }
-
-        $code = wp_remote_retrieve_response_code($response);
-        if ($code !== 200) {
-            return false;
-        }
-
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
-
-        return $data;
+        return $this->horizon_get_json(REAL8_GW_HORIZON_URL . '/transactions/' . rawurlencode($tx_hash), 10);
     }
 
     /**

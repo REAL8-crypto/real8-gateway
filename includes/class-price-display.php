@@ -49,7 +49,7 @@ class REAL8_Price_Display {
     private function __construct() {
         // Check if gateway is enabled first
         $gateway_enabled = get_option('woocommerce_real8_payment_settings');
-        if (!$gateway_enabled || (isset($gateway_enabled['enabled']) && $gateway_enabled['enabled'] !== 'yes')) {
+        if (get_woocommerce_currency() !== 'USD' || !$gateway_enabled || (isset($gateway_enabled['enabled']) && $gateway_enabled['enabled'] !== 'yes')) {
             return;
         }
 
@@ -85,7 +85,7 @@ class REAL8_Price_Display {
         add_filter('woocommerce_thankyou_order_received_text', array($this, 'filter_thankyou_text'), 10, 2);
 
         // REAL8 equivalents for subscription recurring totals on checkout
-        add_action('wp_footer', array($this, 'recurring_totals_script'));
+        add_action('wp_enqueue_scripts', array($this, 'recurring_totals_script'));
 
         // Enqueue frontend styles
         add_action('wp_enqueue_scripts', array($this, 'enqueue_styles'));
@@ -287,42 +287,9 @@ class REAL8_Price_Display {
         if (!$real8_price) {
             return;
         }
-        ?>
-        <script>
-        (function(){
-            var real8Price = <?php echo wp_json_encode($real8_price); ?>;
+        wp_enqueue_script('real8-price-display', REAL8_GATEWAY_PLUGIN_URL . 'assets/js/price-display.js', array('jquery'), REAL8_GATEWAY_VERSION, true);
+        wp_localize_script('real8-price-display', 'real8_prices', array('rate' => $real8_price));
 
-            function formatReal8(amount) {
-                if (amount >= 1000000) return (amount / 1000000).toFixed(2) + 'M';
-                if (amount >= 1000) return amount.toLocaleString('en-US', {maximumFractionDigits: 0});
-                if (amount >= 1) return amount.toFixed(2);
-                return amount.toFixed(4);
-            }
-
-            function appendReal8(el) {
-                if (!el || el.querySelector('.real8-equivalent')) return;
-                var text = el.textContent.replace(/[^0-9.,]/g, '').replace(',', '');
-                var usd = parseFloat(text);
-                if (!usd || usd <= 0) return;
-                var r8 = usd / real8Price;
-                var span = document.createElement('span');
-                span.className = 'real8-equivalent';
-                span.innerHTML = '&asymp; ' + formatReal8(r8) + ' $REAL8';
-                el.parentNode.insertBefore(span, el.nextSibling);
-            }
-
-            function update() {
-                // Recurring total header amount
-                document.querySelectorAll('.recurring-total-header > span:last-child').forEach(appendReal8);
-                // Recurring details subtotal
-                document.querySelectorAll('.recurring-totals-table .total td').forEach(appendReal8);
-            }
-
-            jQuery(document.body).on('updated_checkout', update);
-            update();
-        })();
-        </script>
-        <?php
     }
 
     /**

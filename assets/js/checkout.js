@@ -16,6 +16,12 @@
         init: function() {
             this.bindEvents();
             this.initPaymentPage();
+            var canvas = document.getElementById('real8-qr-canvas');
+            if (canvas && canvas.dataset.walletUrl && typeof QRCode !== 'undefined') {
+                QRCode.toCanvas(canvas, canvas.dataset.walletUrl, {width: 180, margin: 2}, function(err) {
+                    if (err) console.error('QR generation error:', err);
+                });
+            }
         },
 
         bindEvents: function() {
@@ -145,7 +151,7 @@
                             if (response.data && response.data.check_error) {
                                 self.showManualMessage(response.data.check_error, 'error');
                             } else if (st && st !== 'confirmed') {
-                                self.showManualMessage(real8_gateway.strings.not_found || 'Pago aún no encontrado en la red. Intenta de nuevo en unos segundos.', 'error');
+                                self.showManualMessage(real8_gateway.strings.not_found || 'Payment not yet found on the network. Please try again shortly.', 'error');
                             } else {
                                 self.showManualMessage((response.data && response.data.status === 'confirmed') ? real8_gateway.strings.paid : real8_gateway.strings.checking, 'ok');
                             }
@@ -285,9 +291,11 @@
                     .addClass('real8-status-confirmed')
                     .html(
                         '<span class="real8-status-icon">&#10004;</span>' +
-                        '<h3>' + real8_gateway.strings.paid + '</h3>' +
-                        '<p>Transaction: ' + (data.tx_hash || '') + '</p>'
+                        '<h3></h3><p></p>'
                     );
+
+                $statusBox.find('h3').text(real8_gateway.strings.paid);
+                $statusBox.find('p').text(real8_gateway.strings.transaction + ' ' + (data.tx_hash || ''));
 
                 // Hide payment details
                 $('.real8-payment-details, .real8-payment-footer').fadeOut();
@@ -308,10 +316,11 @@
                     .addClass('real8-status-expired')
                     .html(
                         '<span class="real8-status-icon">&#10060;</span>' +
-                        '<h3>' + real8_gateway.strings.expired + '</h3>' +
-                        '<p>Please contact support if you made a payment.</p>'
+                        '<h3></h3><p></p>'
                     );
 
+                $statusBox.find('h3').text(real8_gateway.strings.expired);
+                $statusBox.find('p').text(real8_gateway.strings.contact_support);
                 $('.real8-payment-details, .real8-checking-status').fadeOut();
 
             } else {
@@ -381,19 +390,14 @@
          * Handle payment expiration
          */
         handleExpired: function() {
-            this.stopChecks();
-
-            var $statusBox = $('.real8-payment-status');
-            $statusBox
-                .removeClass('real8-status-pending')
-                .addClass('real8-status-expired')
-                .html(
-                    '<span class="real8-status-icon">&#10060;</span>' +
-                    '<h3>' + real8_gateway.strings.expired + '</h3>' +
-                    '<p>The payment window has expired.</p>'
-                );
-
-            $('.real8-payment-details, .real8-checking-status').fadeOut();
+            // The server must check Stellar before deciding that a payment expired.
+            // Keep polling through outages and delayed cron confirmations.
+            if (this.countdownInterval) {
+                clearInterval(this.countdownInterval);
+                this.countdownInterval = null;
+            }
+            $('#real8-countdown').text('0');
+            $('.real8-checking-status').text(real8_gateway.strings.verification_pending);
         },
 
         /**

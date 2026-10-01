@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "esbuild": "0.25.12",
+    "qrcode": "1.5.4"
+  }
+}

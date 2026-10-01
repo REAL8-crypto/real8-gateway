@@ -32,3 +32,6 @@ node_modules/
 # Development documentation (not for distribution)
 CLAUDE.md
 CLAUDE/
+
+# Audit tools and distributable ZIPs
+dist/

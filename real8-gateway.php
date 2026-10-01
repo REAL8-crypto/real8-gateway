@@ -3,37 +3,35 @@
  * Plugin Name: REAL8 Gateway for WooCommerce
  * Plugin URI: https://real8.org
  * Description: Accept REAL8 token payments on the Stellar blockchain for WooCommerce orders
- * Version: 4.5.4
+ * Version: 4.6.0
  * Author: REAL8
  * Author URI: https://real8.org
- * License: GPL v2 or later
+ * License: GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: real8-gateway
  * Domain Path: /languages
- * Requires at least: 5.8
+ * Requires at least: 6.5
  * Requires PHP: 7.4
- * WC requires at least: 5.0
- * WC tested up to: 9.0
+ * Requires Plugins: woocommerce
+ * WC requires at least: 8.3
+ * WC tested up to: 11.1
  */
+
+// Payment records use plugin-owned tables; WooCommerce CRUD handles orders.
+// Verification and atomic claims require fresh reads; caching could settle stale rows.
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-define('REAL8_GATEWAY_VERSION', '4.5.4');
+define('REAL8_GATEWAY_VERSION', '4.6.0');
 define('REAL8_GATEWAY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('REAL8_GATEWAY_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('REAL8_GATEWAY_PLUGIN_FILE', __FILE__);
 
 // Database version for schema migrations
-define('REAL8_GATEWAY_DB_VERSION', '3.0.0');
-
-// Payment intent HMAC secret — MUST be defined in wp-config.php.
-// Never hardcode here; this plugin is published on a public GitHub repo.
-// If undefined, payment intent signing will fail and intents are effectively disabled.
-if (!defined('REAL8_PAYMENT_INTENT_SECRET')) {
-    error_log('REAL8 Gateway: REAL8_PAYMENT_INTENT_SECRET is not defined in wp-config.php. Payment intents will fail HMAC verification.');
-}
+define('REAL8_GATEWAY_DB_VERSION', '4.0.0');
 
 // Legacy constants - kept for backward compatibility
 // @deprecated 3.0.0 Use REAL8_Token_Registry class instead
@@ -72,12 +70,12 @@ class REAL8_Gateway {
     private function init_hooks() {
         add_action('plugins_loaded', array($this, 'check_dependencies'));
         add_action('init', array($this, 'init'));
-        add_action('plugins_loaded', array($this, 'load_textdomain'));
+        add_action('woocommerce_blocks_loaded', array($this, 'register_blocks_support'));
         add_action('before_woocommerce_init', array($this, 'declare_hpos_compatibility'));
         
         // REST API endpoints (fallback when caches block wc-ajax)
         add_action('rest_api_init', array($this, 'register_rest_routes'));
-add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), array($this, 'add_settings_link'));
+        add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), array($this, 'add_settings_link'));
         register_activation_hook(REAL8_GATEWAY_PLUGIN_FILE, array($this, 'activate'));
         register_deactivation_hook(REAL8_GATEWAY_PLUGIN_FILE, array($this, 'deactivate'));
 
@@ -107,6 +105,10 @@ add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), 
         }
         $this->include_files();
         $this->maybe_migrate_settings();
+        if (get_option('real8_gateway_db_version') !== REAL8_GATEWAY_DB_VERSION) {
+            $this->create_tables();
+            $this->migrate_database();
+        }
 
         // Self-healing cron (v4.5.1): scheduling used to happen only in the
         // activation hook, so a plugin update by file replacement (or any
@@ -171,33 +173,37 @@ add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), 
         require_once REAL8_GATEWAY_PLUGIN_DIR . 'includes/class-payment-gateway.php';
         require_once REAL8_GATEWAY_PLUGIN_DIR . 'includes/class-payment-monitor.php';
         require_once REAL8_GATEWAY_PLUGIN_DIR . 'includes/class-price-display.php';
-        require_once REAL8_GATEWAY_PLUGIN_DIR . 'includes/class-github-updater.php';
+
 
         // Initialize price display for shop pages
         REAL8_Price_Display::get_instance();
 
-        // Initialize GitHub update checker
-        new REAL8_GitHub_Updater();
     }
 
     /**
      * Add REAL8 payment gateway to WooCommerce
      */
     public function add_gateway($gateways) {
-        $gateways[] = 'WC_Gateway_REAL8';
+        $gateways[] = 'REAL8_WC_Payment_Gateway';
         return $gateways;
     }
 
-    public function load_textdomain() {
-        $plugin_rel_path = dirname(plugin_basename(REAL8_GATEWAY_PLUGIN_FILE)) . '/languages';
-        load_plugin_textdomain('real8-gateway', false, $plugin_rel_path);
+    public function register_blocks_support() {
+        if (!class_exists('\Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType')) {
+            return;
+        }
+        require_once REAL8_GATEWAY_PLUGIN_DIR . 'includes/class-blocks-payment-method.php';
+        add_action('woocommerce_blocks_payment_method_type_registration', function($registry) {
+            $registry->register(new REAL8_Blocks_Payment_Method());
+        });
     }
+
 
     /**
      * Add Settings link to plugins page
      */
     public function add_settings_link($links) {
-        $settings_link = '<a href="' . admin_url('admin.php?page=wc-settings&tab=checkout&section=real8_payment') . '">' . __('Settings', 'real8-gateway') . '</a>';
+        $settings_link = '<a href="' . esc_url(admin_url('admin.php?page=wc-settings&tab=checkout&section=real8_payment')) . '">' . esc_html__('Settings', 'real8-gateway') . '</a>';
         array_unshift($links, $settings_link);
         return $links;
     }
@@ -208,6 +214,7 @@ add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), 
     public function declare_hpos_compatibility() {
         if (class_exists('\Automattic\WooCommerce\Utilities\FeaturesUtil')) {
             \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('custom_order_tables', REAL8_GATEWAY_PLUGIN_FILE, true);
+            \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('cart_checkout_blocks', REAL8_GATEWAY_PLUGIN_FILE, true);
         }
     }
 
@@ -216,12 +223,10 @@ add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), 
         $this->migrate_database();
         $this->set_default_options();
         $this->schedule_payment_checks();
-        flush_rewrite_rules();
     }
 
     public function deactivate() {
         $this->unschedule_payment_checks();
-        flush_rewrite_rules();
     }
 
     private function create_tables() {
@@ -230,7 +235,7 @@ add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), 
         $table_name = $wpdb->prefix . 'real8_payments';
 
         // Updated schema with multi-token support (v3.0.0)
-        $sql = "CREATE TABLE IF NOT EXISTS $table_name (
+        $sql = "CREATE TABLE $table_name (
             id bigint(20) NOT NULL AUTO_INCREMENT,
             order_id bigint(20) NOT NULL,
             memo varchar(64) NOT NULL,
@@ -245,7 +250,7 @@ add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), 
             expires_at datetime NOT NULL,
             paid_at datetime DEFAULT NULL,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
+            PRIMARY KEY  (id),
             UNIQUE KEY order_id (order_id),
             KEY memo (memo),
             KEY status (status),
@@ -255,6 +260,19 @@ add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), 
 
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql);
+        $claims_table = $wpdb->prefix . 'real8_transaction_claims';
+        dbDelta("CREATE TABLE $claims_table (
+            tx_hash varchar(64) NOT NULL,
+            payment_id bigint(20) NOT NULL,
+            PRIMARY KEY  (tx_hash),
+            KEY payment_id (payment_id)
+        ) $charset_collate;");
+        // Preserve claims across retries and seed existing confirmed transactions.
+        $wpdb->query($wpdb->prepare(
+            "INSERT IGNORE INTO %i (tx_hash, payment_id) SELECT stellar_tx_hash, id FROM %i WHERE stellar_tx_hash IS NOT NULL AND stellar_tx_hash <> ''",
+            $claims_table, $table_name
+        ));
+
     }
 
     /**
@@ -268,40 +286,42 @@ add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), 
 
         // Skip if already migrated
         if (version_compare($installed_version, '3.0.0', '>=')) {
+            update_option('real8_gateway_db_version', REAL8_GATEWAY_DB_VERSION);
             return;
         }
 
         // Check if old columns exist (amount_real8, real8_price)
-        $columns = $wpdb->get_col("DESCRIBE $table_name", 0);
+        $columns = $wpdb->get_col($wpdb->prepare("DESCRIBE %i", $table_name), 0);
 
         // Add new columns if they don't exist
         if (!in_array('asset_code', $columns)) {
-            $wpdb->query("ALTER TABLE $table_name ADD COLUMN asset_code VARCHAR(12) NOT NULL DEFAULT 'REAL8' AFTER memo");
+            $wpdb->query($wpdb->prepare("ALTER TABLE %i ADD COLUMN asset_code VARCHAR(12) NOT NULL DEFAULT 'REAL8' AFTER memo", $table_name));
         }
 
         if (!in_array('asset_issuer', $columns)) {
-            $wpdb->query("ALTER TABLE $table_name ADD COLUMN asset_issuer VARCHAR(56) DEFAULT NULL AFTER asset_code");
+            $wpdb->query($wpdb->prepare("ALTER TABLE %i ADD COLUMN asset_issuer VARCHAR(56) DEFAULT NULL AFTER asset_code", $table_name));
         }
 
         // Rename old columns to new generic names
         if (in_array('amount_real8', $columns) && !in_array('amount_token', $columns)) {
-            $wpdb->query("ALTER TABLE $table_name CHANGE amount_real8 amount_token DECIMAL(20,7) NOT NULL");
+            $wpdb->query($wpdb->prepare("ALTER TABLE %i CHANGE amount_real8 amount_token DECIMAL(20,7) NOT NULL", $table_name));
         }
 
         if (in_array('real8_price', $columns) && !in_array('token_price', $columns)) {
-            $wpdb->query("ALTER TABLE $table_name CHANGE real8_price token_price DECIMAL(15,8) NOT NULL");
+            $wpdb->query($wpdb->prepare("ALTER TABLE %i CHANGE real8_price token_price DECIMAL(15,8) NOT NULL", $table_name));
         }
 
         // Set REAL8 issuer for existing records (they were all REAL8)
         $wpdb->query($wpdb->prepare(
-            "UPDATE $table_name SET asset_issuer = %s WHERE asset_issuer IS NULL AND asset_code = 'REAL8'",
+            "UPDATE %i SET asset_issuer = %s WHERE asset_issuer IS NULL AND asset_code = 'REAL8'",
+            $table_name,
             REAL8_GW_ASSET_ISSUER
         ));
 
         // Add index on asset_code if it doesn't exist
-        $indexes = $wpdb->get_results("SHOW INDEX FROM $table_name WHERE Key_name = 'asset_code'");
+        $indexes = $wpdb->get_results($wpdb->prepare("SHOW INDEX FROM %i WHERE Key_name = 'asset_code'", $table_name));
         if (empty($indexes)) {
-            $wpdb->query("ALTER TABLE $table_name ADD INDEX asset_code (asset_code)");
+            $wpdb->query($wpdb->prepare("ALTER TABLE %i ADD INDEX asset_code (asset_code)", $table_name));
         }
 
         // Update version
@@ -331,7 +351,7 @@ add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), 
      */
     private function schedule_payment_checks() {
         if (!wp_next_scheduled('real8_gateway_check_payments')) {
-            wp_schedule_event(time(), 'every_minute', 'real8_gateway_check_payments');
+            wp_schedule_event(time(), 'real8_gateway_every_minute', 'real8_gateway_check_payments');
         }
     }
 
@@ -339,10 +359,7 @@ add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), 
      * Unschedule payment check cron
      */
     private function unschedule_payment_checks() {
-        $timestamp = wp_next_scheduled('real8_gateway_check_payments');
-        if ($timestamp) {
-            wp_unschedule_event($timestamp, 'real8_gateway_check_payments');
-        }
+        wp_clear_scheduled_hook('real8_gateway_check_payments');
     }
 
     /**
@@ -364,6 +381,11 @@ add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), 
 
         register_rest_route('real8-gateway/v1', '/check', array(
             'methods' => 'POST',
+            'args' => array(
+                'order_id' => array('type' => 'integer', 'required' => true, 'minimum' => 1, 'validate_callback' => 'rest_validate_request_arg'),
+                'order_key' => array('type' => 'string', 'required' => true, 'sanitize_callback' => 'sanitize_text_field', 'validate_callback' => 'rest_validate_request_arg'),
+                'force' => array('type' => 'integer', 'default' => 0, 'enum' => array(0, 1, 2), 'validate_callback' => 'rest_validate_request_arg'),
+            ),
             'callback' => array($this, 'rest_check_payment_status'),
             'permission_callback' => '__return_true',
         ));
@@ -413,7 +435,8 @@ add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), 
         global $wpdb;
         $table = $wpdb->prefix . 'real8_payments';
         $payment = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM $table WHERE order_id = %d",
+            "SELECT * FROM %i WHERE order_id = %d",
+            $table,
             $order_id
         ));
 
@@ -478,30 +501,28 @@ add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), 
         $check_error = '';
 
         if ($should_check) {
-            $lock_key = 'real8_manual_check_lock_' . $order_id;
-            if (!get_transient($lock_key)) {
-                set_transient($lock_key, 1, 20); // prevent hammering the Stellar API
-                $did_check = true;
-
-                if (class_exists('REAL8_Payment_Monitor')) {
-                    $monitor = \REAL8_Payment_Monitor::get_instance();
-                    $result = $monitor->manual_check_order($order_id);
-
-                    if (is_wp_error($result)) {
-                        $check_error = $result->get_error_message();
-                    }
-                } else {
-                    $check_error = 'Payment monitor not available';
+            $did_check = true;
+            if (class_exists('REAL8_Payment_Monitor')) {
+                $result = REAL8_Payment_Monitor::get_instance()->manual_check_order($order_id);
+                if (is_wp_error($result)) {
+                    $check_error = $result->get_error_message();
                 }
+            } else {
+                $check_error = __('Payment monitor not available.', 'real8-gateway');
             }
         }
 
+
         // Re-fetch after a manual check attempt (so we return current state)
         $payment = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM $table WHERE order_id = %d",
+            "SELECT * FROM %i WHERE order_id = %d",
+            $table,
             $order_id
         ));
 
+        if (!$payment) {
+            return $send_error(__('Payment not found', 'real8-gateway'), 'payment_not_found');
+        }
         $expires_at = strtotime($payment->expires_at);
         $response = array(
             'status' => $payment->status,
@@ -523,7 +544,7 @@ add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), 
  * Add custom cron schedule for every minute
  */
 add_filter('cron_schedules', function($schedules) {
-    $schedules['every_minute'] = array(
+    $schedules['real8_gateway_every_minute'] = array(
         'interval' => 60,
         'display' => __('Every Minute', 'real8-gateway')
     );
@@ -581,6 +602,17 @@ add_filter('woocommerce_get_order_item_totals', function($totals, $order, $tax_d
 
     return $new;
 }, 20, 3);
+
+/**
+ * Record operational payment events in WooCommerce > Status > Logs.
+ *
+ * @param string $message Event description; never include credentials.
+ */
+function real8_gateway_log($message) {
+    if (function_exists('wc_get_logger')) {
+        wc_get_logger()->info($message, array('source' => 'real8-gateway'));
+    }
+}
 
 /**
  * Initialize the plugin

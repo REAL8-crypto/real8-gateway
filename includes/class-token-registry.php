@@ -32,7 +32,7 @@ class REAL8_Token_Registry {
         ),
         'REAL8' => array(
             'code' => 'REAL8',
-            'name' => 'Moneda REAL8',
+            'name' => 'REAL8',
             'issuer' => 'GBVYYQ7XXRZW6ZCNNCL2X2THNPQ6IM4O47HAA25JTAG7Z3CXJCQ3W4CD',
             'decimals' => 7,
             'is_native' => false,
@@ -40,9 +40,9 @@ class REAL8_Token_Registry {
             'icon' => 'real8.svg',
             'color' => '#0052FF',
         ),
-        'wREAL8' => array(
+        'WREAL8' => array(
             'code' => 'wREAL8',
-            'name' => 'REAL8 envuelto',
+            'name' => 'Wrapped REAL8',
             'issuer' => 'GADYIWMD5P75ZHTVIIF6ADU6GYE5T7WRZIHAU4LPAZ4F5IMPD7NRK7V7',
             'decimals' => 7,
             'is_native' => false,
@@ -52,7 +52,7 @@ class REAL8_Token_Registry {
         ),
         'USDC' => array(
             'code' => 'USDC',
-            'name' => 'Moneda USD',
+            'name' => 'USD Coin',
             'issuer' => 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
             'decimals' => 7,
             'is_native' => false,
@@ -62,7 +62,7 @@ class REAL8_Token_Registry {
         ),
         'EURC' => array(
             'code' => 'EURC',
-            'name' => 'Moneda Euro',
+            'name' => 'Euro Coin',
             'issuer' => 'GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2',
             'decimals' => 7,
             'is_native' => false,
@@ -100,7 +100,7 @@ class REAL8_Token_Registry {
     /**
      * Tokens that get pricing from Stellar Horizon orderbook
      */
-    private static $horizon_priced_tokens = array('EURC', 'SLVR', 'GOLD', 'wREAL8');
+    private static $horizon_priced_tokens = array('EURC', 'SLVR', 'GOLD', 'WREAL8');
 
     /**
      * Get a single token by code
@@ -289,21 +289,4 @@ class REAL8_Token_Registry {
         return $token ? $token['color'] : '#666666';
     }
 
-    /**
-     * Get fallback prices for when APIs are unavailable
-     * These should be updated periodically
-     *
-     * @return array Token code => USD price
-     */
-    public static function get_fallback_prices() {
-        return array(
-            'XLM' => 0.45,
-            'REAL8' => 0.0142,
-            'wREAL8' => 0.0142,
-            'USDC' => 1.00,
-            'EURC' => 1.10,
-            'SLVR' => 31.00,
-            'GOLD' => 2700.00,
-        );
-    }
 }

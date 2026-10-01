@@ -1,11 +1,11 @@
 # REAL8 Gateway for WooCommerce
 
 ![WordPress Plugin](https://img.shields.io/badge/WordPress-Plugin-blue.svg)
-![Version](https://img.shields.io/badge/version-4.5.4-green.svg)
+![Version](https://img.shields.io/badge/version-4.6.0-green.svg)
 ![License](https://img.shields.io/badge/license-GPL--2.0%2B-blue.svg)
 ![PHP](https://img.shields.io/badge/PHP-7.4%2B-purple.svg)
-![WordPress](https://img.shields.io/badge/WordPress-5.8%2B-0073aa.svg)
-![WooCommerce](https://img.shields.io/badge/WooCommerce-5.0%2B-96588a.svg)
+![WordPress](https://img.shields.io/badge/WordPress-6.5%2B-0073aa.svg)
+![WooCommerce](https://img.shields.io/badge/WooCommerce-8.3%2B-96588a.svg)
 ![Stellar](https://img.shields.io/badge/Stellar-Blockchain-brightgreen.svg)
 
 Accept REAL8 token payments on the Stellar blockchain for your WooCommerce store.
@@ -29,9 +29,10 @@ REAL8 Gateway enables WooCommerce merchants to accept REAL8 tokens as payment. C
 
 ## Requirements
 
-- WordPress 5.8+
-- WooCommerce 5.0+
+- WordPress 6.5+
+- WooCommerce 8.3+
 - PHP 7.4+
+- USD store currency
 - A Stellar wallet with REAL8 trustline
 
 ## Installation
@@ -39,7 +40,7 @@ REAL8 Gateway enables WooCommerce merchants to accept REAL8 tokens as payment. C
 1. Upload the `real8-gateway` folder to `/wp-content/plugins/`
 2. Activate the plugin through the 'Plugins' menu in WordPress
 3. Go to WooCommerce > Settings > Payments > REAL8 Payment
-4. Configure your merchant Stellar address
+4. Configure your merchant Stellar address and read the external-service disclosures
 5. Enable the payment method
 
 ## Merchant Wallet Setup
@@ -113,7 +114,7 @@ Customer Checkout → Calculate REAL8 Amount → Generate Memo
 The plugin fetches real-time REAL8 prices from `https://api.real8.org/prices`.
 
 - Price is cached for 60 seconds to reduce API calls
-- Falls back to last known good price if API is unavailable
+- Stops new quotes if a valid price is unavailable
 - Price buffer (default 2%) protects against volatility
 
 ## Security Considerations
@@ -163,3 +164,13 @@ GPL v2 or later
 ## Credits
 
 Developed by [REAL8](https://real8.org)
+
+## WordPress.org release preparation
+
+See [readme.txt](readme.txt) for external services, data sent and installation details.
+
+Build the upload ZIP with `python3 tools/build-release.py`. Only runtime files, translation files, readme and license notices enter `dist/real8-gateway-4.6.0.zip`; CI, directory banners and development tools are excluded. Run the official Plugin Check tool against the extracted ZIP, not the repository checkout.
+
+The WordPress.org build uses WordPress.org updates and carries no updater of its own. Hosted payment redirects are an explicit opt-in for new installations; a store that already had `REAL8_PAYMENT_INTENT_SECRET` configured before upgrading keeps its redirect.
+
+The QR bundle uses node-qrcode 1.5.4 and dijkstrajs 1.0.3 under MIT. Rebuild with `cd tools/qr && npm ci --ignore-scripts && node build.mjs`. The pinned lockfile and notices preserve dependency attribution.

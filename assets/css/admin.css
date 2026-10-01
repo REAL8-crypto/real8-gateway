@@ -150,3 +150,14 @@
 @keyframes real8-spin {
     to { transform: rotate(360deg); }
 }
+
+            .stellar-token-ok { background: #d4edda; color: #155724; }
+            .stellar-token-missing { background: #f8d7da; color: #721c24; }
+            .stellar-status-box { padding: 10px 15px; border-radius: 4px; display: flex; align-items: center; gap: 8px; }
+            .stellar-status-success { background: #d4edda; color: #155724; }
+            .stellar-status-warning { background: #fff3cd; color: #856404; }
+            .stellar-status-error { background: #f8d7da; color: #721c24; }
+            .stellar-check { display: flex; align-items: center; gap: 5px; margin: 5px 0; }
+            .stellar-check-success { color: #155724; }
+            .stellar-check-warning { color: #856404; }
+            .stellar-check-error { color: #721c24; }

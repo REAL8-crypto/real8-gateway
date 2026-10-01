@@ -5,6 +5,25 @@ All notable changes to REAL8 Gateway for WooCommerce will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.6.0] - 2026-10-01
+
+### Changed
+- Require WordPress 6.5 and WooCommerce 8.3; declare the WooCommerce dependency.
+- Replace GitHub update hooks with WordPress.org updates. Existing installations need a manual upgrade until the directory release exists.
+- Restrict quotes and price equivalents to USD; remove stale and hardcoded rate fallbacks, validate prices, and use the configured price buffer.
+- Make hosted payment-intent redirects an explicit opt-in with disclosure of data sent, including the order access key.
+
+### Added
+- WooCommerce Checkout block integration, WordPress.org readme, licenses, service disclosures and deterministic ZIP builder.
+- Database transaction claims that survive payment retries and prevent simultaneous reuse.
+
+### Fixed
+- Require destination, successful transaction, asset, memo and amount checks in fallback verification; propagate network and malformed-response errors.
+- Reject old transaction replays, generate fresh retry memos, guard paid orders, tie quotes to totals and currency, and reset expired quote locks.
+- Continue browser verification after the countdown ends; enqueue QR scripts and extract inline template assets.
+- Bound absolute underpayment tolerance, validate hosted redirect responses, escape output and improve translation metadata.
+- Declare gateway properties for PHP 8.2+, repair admin script names and scope notices to gateway settings.
+
 ## [4.5.4] - 2026-09-22
 
 ### Fixed

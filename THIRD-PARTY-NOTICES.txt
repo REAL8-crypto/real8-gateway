@@ -1,0 +1,18 @@
+REAL8 Gateway original code: Copyright REAL8, GPL-2.0-or-later.
+The full GPL version 2 text is included in LICENSE.
+
+node-qrcode 1.5.4 (MIT)
+Bundled file: assets/js/qrcode-1.5.4.js
+License: assets/js/qrcode-LICENSE.txt
+Source: https://github.com/soldair/node-qrcode/tree/v1.5.4
+
+The browser bundle also contains dijkstrajs 1.0.3 (MIT).
+License: assets/js/dijkstrajs-LICENSE.txt
+Source: https://github.com/tcort/dijkstrajs/tree/v1.0.3
+
+The bundle is readable and unminified. Its entry point, pinned build dependencies,
+lockfile and build script are in the public development repository:
+https://github.com/REAL8-crypto/real8-gateway/tree/main/tools/qr
+Build: cd tools/qr; npm ci --ignore-scripts; node build.mjs
+The plugin loads the local bundle through WordPress, never a CDN script.
+SHA-256 of the generated bundle: d372d1288ef97927d1df9730cc1a847735c988110fba37fb8b5a7db2e51ecdec

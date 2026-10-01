@@ -192,3 +192,292 @@
     opacity: 0.8;
     font-size: 12px;
 }
+
+
+.real8-payment-box {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 25px;
+    margin: 20px 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.real8-payment-status {
+    text-align: center;
+    padding: 20px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+
+.real8-status-pending {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+}
+
+.real8-status-confirmed {
+    background: #d4edda;
+    border: 1px solid #28a745;
+}
+
+.real8-status-expired {
+    background: #f8d7da;
+    border: 1px solid #dc3545;
+}
+
+.real8-status-sent {
+    background: #e7f3ff;
+    border: 1px solid #b6d4fe;
+}
+
+.real8-spinner-lg {
+    display: inline-block;
+    width: 36px;
+    height: 36px;
+    border-width: 4px;
+}
+
+.real8-sent-tx code {
+    background: transparent;
+    font-size: 0.9em;
+}
+
+.real8-status-icon {
+    font-size: 48px;
+    display: block;
+    margin-bottom: 10px;
+}
+
+.real8-pulse {
+    animation: real8-payment-pulse 2s infinite;
+}
+
+@keyframes real8-payment-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.real8-payment-status h3 {
+    margin: 0 0 10px;
+    font-size: 1.4em;
+}
+
+.real8-timer {
+    font-size: 1.1em;
+    font-weight: 600;
+}
+
+.real8-detail-row {
+    margin-bottom: 15px;
+}
+
+.real8-detail-row label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 5px;
+    color: #333;
+}
+
+.real8-value {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #f8f9fa;
+    padding: 10px 15px;
+    border-radius: 4px;
+    border: 1px solid #e9ecef;
+}
+
+.real8-value code {
+    flex: 1;
+    background: transparent;
+    padding: 0;
+    word-break: break-all;
+    font-size: 14px;
+}
+
+.real8-amount strong {
+    font-size: 1.3em;
+}
+
+.real8-copy-btn {
+    background: #007bff;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 5px 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.real8-copy-btn:hover {
+    background: #0056b3;
+}
+
+.real8-copy-btn .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+
+.real8-memo-row .real8-value {
+    background: #e7f3ff;
+    border-color: #b6d4fe;
+}
+
+.real8-warning {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 4px;
+    padding: 12px 15px;
+    margin: 20px 0;
+    font-size: 0.9em;
+}
+
+.real8-asset-info {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    margin-top: 20px;
+}
+
+.real8-asset-header {
+    padding-left: 10px;
+    margin-bottom: 10px;
+}
+
+.real8-native-asset {
+    color: #666;
+    font-style: italic;
+    margin: 0;
+}
+
+.real8-asset-info code.real8-issuer {
+    font-size: 0.75em;
+    word-break: break-all;
+}
+
+.real8-payment-footer {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+    text-align: center;
+}
+
+.real8-checking-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: #666;
+}
+
+.real8-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #ddd;
+    border-top-color: #007bff;
+    border-radius: 50%;
+    animation: real8-payment-spin 1s linear infinite;
+}
+
+@keyframes real8-payment-spin {
+    to { transform: rotate(360deg); }
+}
+
+.real8-order-total {
+    font-size: 0.9em;
+    color: #666;
+}
+
+/* Copy success animation */
+.real8-copy-btn.copied {
+    background: #28a745;
+}
+
+/* Pay with REAL8 Wallet */
+.real8-wallet-action {
+    text-align: center;
+    margin: 20px 0;
+    padding: 20px;
+    background: linear-gradient(135deg, #f0f7ff 0%, #e8f0fe 100%);
+    border: 1px solid #b6d4fe;
+    border-radius: 8px;
+}
+
+.real8-wallet-btn {
+    display: inline-block;
+    background: linear-gradient(135deg, #0052FF 0%, #00C2FF 100%);
+    color: #fff !important;
+    font-size: 1.15em;
+    font-weight: 700;
+    padding: 14px 32px;
+    border-radius: 8px;
+    text-decoration: none !important;
+    transition: opacity 0.2s;
+}
+
+.real8-wallet-btn:hover {
+    opacity: 0.9;
+    color: #fff !important;
+}
+
+.real8-wallet-hint {
+    margin: 10px 0 0;
+    font-size: 0.85em;
+    color: #555;
+}
+
+.real8-qr-wrap {
+    margin-top: 16px;
+}
+
+.real8-qr-wrap canvas {
+    display: block;
+    margin: 0 auto;
+    border-radius: 4px;
+}
+
+.real8-qr-label {
+    margin: 6px 0 0;
+    font-size: 0.8em;
+    color: #888;
+}
+
+.real8-manual-details {
+    margin: 16px 0 0;
+    font-size: 0.9em;
+}
+
+.real8-manual-details summary {
+    cursor: pointer;
+    color: #0052FF;
+    font-weight: 600;
+}
+
+/* Hide "Pay" button on order-received (redundant — payment via wallet) */
+body:has(#real8-payment-instructions) .woocommerce-order-details .order-actions-button.pay,
+body:has(#real8-payment-instructions) .woocommerce-table--order-details .order-actions-button.pay,
+body:has(#real8-payment-instructions) a.woocommerce-button.button.pay {
+    display: none !important;
+}
+
+/* Style "Cancel" button */
+body:has(#real8-payment-instructions) .woocommerce-order-details .order-actions-button.cancel,
+body:has(#real8-payment-instructions) .woocommerce-table--order-details .order-actions-button.cancel,
+body:has(#real8-payment-instructions) a.woocommerce-button.button.cancel {
+    color: #fff !important;
+    background: #dc3545 !important;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+}
+
+body:has(#real8-payment-instructions) a.woocommerce-button.button.cancel:hover {
+    background: #b02a37 !important;
+    color: #fff !important;
+}

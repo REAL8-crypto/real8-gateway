@@ -11,20 +11,20 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Variables available: $order, $memo, $amount, $expires, $merchant, $status, $asset_code, $asset_issuer, $sent_tx
-$expires_timestamp = strtotime($expires);
-$time_remaining = max(0, $expires_timestamp - time());
-$minutes_remaining = ceil($time_remaining / 60);
-$sent_tx = isset($sent_tx) ? $sent_tx : '';
+// Variables available: $order, $memo, $amount, $expires, $merchant, $status, $asset_code, $asset_issuer, $real8_sent_tx
+$real8_expires_timestamp = strtotime($expires);
+$real8_time_remaining = max(0, $real8_expires_timestamp - time());
+$real8_minutes_remaining = ceil($real8_time_remaining / 60);
+$real8_sent_tx = isset($sent_tx) ? $sent_tx : '';
 
 // Get token display info from registry
-$token_info = REAL8_Token_Registry::get_token($asset_code);
-$token_name = $token_info ? $token_info['name'] : $asset_code;
-$token_color = $token_info ? $token_info['color'] : '#666666';
-$is_native = $token_info ? $token_info['is_native'] : false;
+$real8_token_info = REAL8_Token_Registry::get_token($asset_code);
+$real8_token_name = $real8_token_info ? $real8_token_info['name'] : $asset_code;
+$real8_token_color = $real8_token_info ? $real8_token_info['color'] : '#666666';
+$real8_is_native = $real8_token_info ? $real8_token_info['is_native'] : false;
 ?>
 
-<div id="real8-payment-instructions" class="real8-payment-box" data-order-id="<?php echo esc_attr($order->get_id()); ?>" data-order-key="<?php echo esc_attr($order->get_order_key()); ?>" data-status="<?php echo esc_attr($status); ?>" data-sent-tx="<?php echo esc_attr($sent_tx); ?>">
+<div id="real8-payment-instructions" class="real8-payment-box" data-order-id="<?php echo esc_attr($order->get_id()); ?>" data-order-key="<?php echo esc_attr($order->get_order_key()); ?>" data-status="<?php echo esc_attr($status); ?>" data-sent-tx="<?php echo esc_attr($real8_sent_tx); ?>">
 
     <?php if ($status === 'completed' || $status === 'confirmed'): ?>
         <!-- Payment Confirmed -->
@@ -50,7 +50,7 @@ $is_native = $token_info ? $token_info['is_native'] : false;
             <p><?php esc_html_e('The payment window has expired. Please contact support if you made a payment.', 'real8-gateway'); ?></p>
         </div>
 
-    <?php elseif ($sent_tx): ?>
+    <?php elseif ($real8_sent_tx): ?>
         <!-- Payment sent by the wallet — confirming on the network -->
         <div class="real8-payment-status real8-status-sent">
             <span class="real8-status-icon"><span class="real8-spinner real8-spinner-lg"></span></span>
@@ -65,7 +65,7 @@ $is_native = $token_info ? $token_info['is_native'] : false;
                 ?>
             </p>
             <p class="real8-sent-tx">
-                <small><?php esc_html_e('Transaction:', 'real8-gateway'); ?> <code><?php echo esc_html(substr($sent_tx, 0, 8) . '…' . substr($sent_tx, -8)); ?></code></small>
+                <small><?php esc_html_e('Transaction:', 'real8-gateway'); ?> <code><?php echo esc_html(substr($real8_sent_tx, 0, 8) . '…' . substr($real8_sent_tx, -8)); ?></code></small>
             </p>
         </div>
 
@@ -83,7 +83,7 @@ $is_native = $token_info ? $token_info['is_native'] : false;
     <?php else: ?>
         <!-- Awaiting Payment -->
         <div class="real8-payment-status real8-status-pending">
-            <span class="real8-status-icon real8-pulse" style="color: <?php echo esc_attr($token_color); ?>;">&#9679;</span>
+            <span class="real8-status-icon real8-pulse" style="color: <?php echo esc_attr($real8_token_color); ?>;">&#9679;</span>
             <h3>
                 <?php
                 printf(
@@ -96,8 +96,9 @@ $is_native = $token_info ? $token_info['is_native'] : false;
             <p class="real8-timer">
                 <?php
                 printf(
+                    /* translators: %s: countdown in minutes. */
                     esc_html__('Time remaining: %s', 'real8-gateway'),
-                    '<span id="real8-countdown">' . esc_html($minutes_remaining) . '</span> ' . esc_html__('minutes', 'real8-gateway')
+                    '<span id="real8-countdown">' . esc_html($real8_minutes_remaining) . '</span> ' . esc_html__('minutes', 'real8-gateway')
                 );
                 ?>
             </p>
@@ -107,10 +108,10 @@ $is_native = $token_info ? $token_info['is_native'] : false;
             <div class="real8-detail-row">
                 <label><?php esc_html_e('Amount:', 'real8-gateway'); ?></label>
                 <div class="real8-value real8-amount">
-                    <strong style="color: <?php echo esc_attr($token_color); ?>;">
-                        <?php echo esc_html(number_format($amount, 7)); ?> $<?php echo esc_html($asset_code); ?>
+                    <strong style="color: <?php echo esc_attr($real8_token_color); ?>;">
+                        <?php echo esc_html(number_format($amount, 7, '.', '')); ?> $<?php echo esc_html($asset_code); ?>
                     </strong>
-                    <button type="button" class="real8-copy-btn" data-copy="<?php echo esc_attr(number_format($amount, 7)); ?>" title="<?php esc_attr_e('Copy amount', 'real8-gateway'); ?>">
+                    <button type="button" class="real8-copy-btn" data-copy="<?php echo esc_attr(number_format($amount, 7, '.', '')); ?>" title="<?php esc_attr_e('Copy amount', 'real8-gateway'); ?>">
                         <span class="dashicons dashicons-admin-page"></span>
                     </button>
                 </div>
@@ -138,7 +139,7 @@ $is_native = $token_info ? $token_info['is_native'] : false;
 
             <?php
             // Build deep link to REAL8 Wallet app
-            $wallet_url = add_query_arg(array(
+            $real8_wallet_url = add_query_arg(array(
                 'wc_pay'    => $merchant,
                 'wc_amount' => number_format($amount, 7, '.', ''),
                 'wc_memo'   => $memo,
@@ -148,14 +149,14 @@ $is_native = $token_info ? $token_info['is_native'] : false;
 
             <!-- Pay with REAL8 Wallet -->
             <div class="real8-wallet-action">
-                <a href="<?php echo esc_url($wallet_url); ?>" class="real8-wallet-btn" target="_blank" rel="noopener noreferrer">
+                <a href="<?php echo esc_url($real8_wallet_url); ?>" class="real8-wallet-btn" target="_blank" rel="noopener noreferrer">
                     <?php esc_html_e('Pay with REAL8 Wallet', 'real8-gateway'); ?>
                 </a>
                 <p class="real8-wallet-hint">
                     <?php esc_html_e('Opens the REAL8 Wallet with payment details pre-filled. Just confirm and send.', 'real8-gateway'); ?>
                 </p>
                 <div class="real8-qr-wrap">
-                    <canvas id="real8-qr-canvas"></canvas>
+                    <canvas id="real8-qr-canvas" data-wallet-url="<?php echo esc_url($real8_wallet_url); ?>"></canvas>
                     <p class="real8-qr-label"><?php esc_html_e('Scan with your phone to pay', 'real8-gateway'); ?></p>
                 </div>
             </div>
@@ -169,10 +170,10 @@ $is_native = $token_info ? $token_info['is_native'] : false;
             </details>
 
             <div class="real8-asset-info">
-                <div class="real8-asset-header" style="border-left: 4px solid <?php echo esc_attr($token_color); ?>;">
-                    <strong><?php echo esc_html($token_name); ?> (<?php echo esc_html($asset_code); ?>)</strong>
+                <div class="real8-asset-header" style="border-left: 4px solid <?php echo esc_attr($real8_token_color); ?>;">
+                    <strong><?php echo esc_html($real8_token_name); ?> (<?php echo esc_html($asset_code); ?>)</strong>
                 </div>
-                <?php if ($is_native): ?>
+                <?php if ($real8_is_native): ?>
                     <p class="real8-native-asset">
                         <?php esc_html_e('Native Stellar Asset', 'real8-gateway'); ?>
                     </p>
@@ -200,8 +201,8 @@ $is_native = $token_info ? $token_info['is_native'] : false;
                 printf(
                     /* translators: 1: order total, 2: token amount, 3: token code */
                     esc_html__('Order Total: %1$s (approximately %2$s $%3$s at current rate)', 'real8-gateway'),
-                    wc_price($order->get_total()),
-                    number_format($amount, 2),
+                    wp_kses_post(wc_price($order->get_total())),
+                    esc_html(number_format($amount, 2)),
                     esc_html($asset_code)
                 );
                 ?>
@@ -210,320 +211,3 @@ $is_native = $token_info ? $token_info['is_native'] : false;
     <?php endif; ?>
 
 </div>
-
-<style>
-.real8-payment-box {
-    background: #fff;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    padding: 25px;
-    margin: 20px 0;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.real8-payment-status {
-    text-align: center;
-    padding: 20px;
-    border-radius: 6px;
-    margin-bottom: 20px;
-}
-
-.real8-status-pending {
-    background: #fff3cd;
-    border: 1px solid #ffc107;
-}
-
-.real8-status-confirmed {
-    background: #d4edda;
-    border: 1px solid #28a745;
-}
-
-.real8-status-expired {
-    background: #f8d7da;
-    border: 1px solid #dc3545;
-}
-
-.real8-status-sent {
-    background: #e7f3ff;
-    border: 1px solid #b6d4fe;
-}
-
-.real8-spinner-lg {
-    display: inline-block;
-    width: 36px;
-    height: 36px;
-    border-width: 4px;
-}
-
-.real8-sent-tx code {
-    background: transparent;
-    font-size: 0.9em;
-}
-
-.real8-status-icon {
-    font-size: 48px;
-    display: block;
-    margin-bottom: 10px;
-}
-
-.real8-pulse {
-    animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-}
-
-.real8-payment-status h3 {
-    margin: 0 0 10px;
-    font-size: 1.4em;
-}
-
-.real8-timer {
-    font-size: 1.1em;
-    font-weight: 600;
-}
-
-.real8-detail-row {
-    margin-bottom: 15px;
-}
-
-.real8-detail-row label {
-    display: block;
-    font-weight: 600;
-    margin-bottom: 5px;
-    color: #333;
-}
-
-.real8-value {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: #f8f9fa;
-    padding: 10px 15px;
-    border-radius: 4px;
-    border: 1px solid #e9ecef;
-}
-
-.real8-value code {
-    flex: 1;
-    background: transparent;
-    padding: 0;
-    word-break: break-all;
-    font-size: 14px;
-}
-
-.real8-amount strong {
-    font-size: 1.3em;
-}
-
-.real8-copy-btn {
-    background: #007bff;
-    color: #fff;
-    border: none;
-    border-radius: 4px;
-    padding: 5px 10px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.real8-copy-btn:hover {
-    background: #0056b3;
-}
-
-.real8-copy-btn .dashicons {
-    font-size: 16px;
-    width: 16px;
-    height: 16px;
-}
-
-.real8-memo-row .real8-value {
-    background: #e7f3ff;
-    border-color: #b6d4fe;
-}
-
-.real8-warning {
-    background: #fff3cd;
-    border: 1px solid #ffc107;
-    border-radius: 4px;
-    padding: 12px 15px;
-    margin: 20px 0;
-    font-size: 0.9em;
-}
-
-.real8-asset-info {
-    background: #f8f9fa;
-    padding: 15px;
-    border-radius: 4px;
-    font-size: 0.85em;
-    margin-top: 20px;
-}
-
-.real8-asset-header {
-    padding-left: 10px;
-    margin-bottom: 10px;
-}
-
-.real8-native-asset {
-    color: #666;
-    font-style: italic;
-    margin: 0;
-}
-
-.real8-asset-info code.real8-issuer {
-    font-size: 0.75em;
-    word-break: break-all;
-}
-
-.real8-payment-footer {
-    margin-top: 20px;
-    padding-top: 15px;
-    border-top: 1px solid #eee;
-    text-align: center;
-}
-
-.real8-checking-status {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    color: #666;
-}
-
-.real8-spinner {
-    width: 16px;
-    height: 16px;
-    border: 2px solid #ddd;
-    border-top-color: #007bff;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
-
-.real8-order-total {
-    font-size: 0.9em;
-    color: #666;
-}
-
-/* Copy success animation */
-.real8-copy-btn.copied {
-    background: #28a745;
-}
-
-/* Pay with REAL8 Wallet */
-.real8-wallet-action {
-    text-align: center;
-    margin: 20px 0;
-    padding: 20px;
-    background: linear-gradient(135deg, #f0f7ff 0%, #e8f0fe 100%);
-    border: 1px solid #b6d4fe;
-    border-radius: 8px;
-}
-
-.real8-wallet-btn {
-    display: inline-block;
-    background: linear-gradient(135deg, #0052FF 0%, #00C2FF 100%);
-    color: #fff !important;
-    font-size: 1.15em;
-    font-weight: 700;
-    padding: 14px 32px;
-    border-radius: 8px;
-    text-decoration: none !important;
-    transition: opacity 0.2s;
-}
-
-.real8-wallet-btn:hover {
-    opacity: 0.9;
-    color: #fff !important;
-}
-
-.real8-wallet-hint {
-    margin: 10px 0 0;
-    font-size: 0.85em;
-    color: #555;
-}
-
-.real8-qr-wrap {
-    margin-top: 16px;
-}
-
-.real8-qr-wrap canvas {
-    display: block;
-    margin: 0 auto;
-    border-radius: 4px;
-}
-
-.real8-qr-label {
-    margin: 6px 0 0;
-    font-size: 0.8em;
-    color: #888;
-}
-
-.real8-manual-details {
-    margin: 16px 0 0;
-    font-size: 0.9em;
-}
-
-.real8-manual-details summary {
-    cursor: pointer;
-    color: #0052FF;
-    font-weight: 600;
-}
-
-/* Hide "Pay" button on order-received (redundant — payment via wallet) */
-.woocommerce-order-details .order-actions-button.pay,
-.woocommerce-table--order-details .order-actions-button.pay,
-a.woocommerce-button.button.pay {
-    display: none !important;
-}
-
-/* Style "Cancel" button */
-.woocommerce-order-details .order-actions-button.cancel,
-.woocommerce-table--order-details .order-actions-button.cancel,
-a.woocommerce-button.button.cancel {
-    color: #fff !important;
-    background: #dc3545 !important;
-    border: none;
-    border-radius: 4px;
-    padding: 8px 16px;
-}
-
-a.woocommerce-button.button.cancel:hover {
-    background: #b02a37 !important;
-    color: #fff !important;
-}
-</style>
-
-<?php if ($status !== 'completed' && $status !== 'confirmed' && $status !== 'expired' && !$sent_tx): // $wallet_url only exists in the awaiting-payment branch ?>
-<script>
-(function(){
-    // Minimal QR code generator (alphanumeric mode, error correction L)
-    // Uses canvas to render a QR code for the wallet deep link URL
-    var url = <?php echo wp_json_encode($wallet_url); ?>;
-    var canvas = document.getElementById('real8-qr-canvas');
-    if (!canvas) return;
-
-    // QR library vendored with the plugin (qrcode@1.5.1 build, sha256
-    // ba588dfaf738bf8980e5da3b680ab1ce3f205af7577454c16f9c0506fe744df4).
-    // Loading an unpinned CDN copy on the page that shows the payment
-    // address/amount/QR was a supply-chain risk (audit 2026-08-19, WP-3).
-    var s = document.createElement('script');
-    s.src = <?php echo wp_json_encode(REAL8_GATEWAY_PLUGIN_URL . 'assets/js/qrcode-1.5.1.js?ver=' . REAL8_GATEWAY_VERSION); ?>;
-    s.onload = function() {
-        if (typeof QRCode !== 'undefined' && QRCode.toCanvas) {
-            QRCode.toCanvas(canvas, url, { width: 180, margin: 2 }, function(err) {
-                if (err) console.error('QR generation error:', err);
-            });
-        }
-    };
-    document.head.appendChild(s);
-})();
-</script>
-<?php endif; ?>

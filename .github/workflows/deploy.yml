@@ -13,6 +13,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Build runtime package
+        run: |
+          python3 tools/build-release.py
+          python3 -m zipfile -e dist/real8-gateway-*.zip /tmp/real8-gateway-release
+
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
@@ -33,7 +38,7 @@ jobs:
             --exclude 'node_modules' \
             --exclude '.DS_Store' \
             --exclude '*.log' \
-            ./ ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/var/www/html/wp-content/plugins/real8-gateway/
+            /tmp/real8-gateway-release/real8-gateway/ ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/var/www/html/wp-content/plugins/real8-gateway/
 
       - name: Verify deployment
         run: |

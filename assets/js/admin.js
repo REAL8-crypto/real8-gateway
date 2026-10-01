@@ -24,7 +24,7 @@
          */
         checkWalletStatus: function() {
             var address = $(this).val().trim().toUpperCase();
-            var $statusDiv = $('#real8-wallet-status');
+            var $statusDiv = $('#stellar-wallet-status');
 
             if (!address) {
                 return;
@@ -33,21 +33,24 @@
             // Basic format validation
             if (address.length !== 56 || address[0] !== 'G') {
                 $statusDiv.html(
-                    '<div class="real8-status-box real8-status-error">' +
+                    '<div class="stellar-status-box stellar-status-error">' +
                     '<span class="dashicons dashicons-no"></span>' +
-                    '<span>Invalid address format. Stellar addresses are 56 characters starting with G.</span>' +
+                    '<span class="stellar-address-message"></span>' +
                     '</div>'
                 );
+                $statusDiv.find('.stellar-address-message').text(real8_admin.strings.invalid);
                 return;
             }
 
             // Show loading state
             $statusDiv.html(
-                '<div class="real8-status-box" style="background: #f0f0f0;">' +
+                '<div class="stellar-status-box" style="background: #f0f0f0;">' +
                 '<span class="dashicons dashicons-update" style="animation: real8-spin 1s linear infinite;"></span>' +
-                '<span>' + real8_admin.strings.checking + '</span>' +
+                '<span class="stellar-address-message"></span>' +
                 '</div>'
             );
+
+            $statusDiv.find('.stellar-address-message').text(real8_admin.strings.save);
 
             // The actual check happens on page reload after save
             // This is just visual feedback for the user
