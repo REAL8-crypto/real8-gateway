@@ -150,17 +150,22 @@ class REAL8_Stellar_Payment_API {
      * Robust check by scanning recent transactions (memo is available directly in /transactions).
      * This supports payment + path_payment operations reliably.
      */
-    private function check_payment_via_transactions($merchant_address, $memo, $expected_amount, $asset_code = 'REAL8', $asset_issuer = null) {
+    private function check_payment_via_transactions($merchant_address, $memo, $expected_amount, $asset_code = 'REAL8', $asset_issuer = null, $not_before = 0) {
         // v3.0.7-style verification: paginate /transactions to find memo first, then inspect ops for the matching payment
         $memo = trim((string) $memo);
         $expected_amount = is_string($expected_amount) ? trim($expected_amount) : (string) $expected_amount;
+        $not_before = (int) $not_before;
 
-        // Apply tolerance by reducing the minimum acceptable amount.
+        // Newest first. The scan is complete as soon as it reaches a
+        // transaction older than the payment being verified, or the end of
+        // the account's history. Only a window holding more transactions than
+        // the page budget is reported as incomplete.
         $cursor = null;
         $pages = 0;
+        $page_size = 200;
 
         while ($pages < 5) {
-            $params = array('order' => 'desc', 'limit' => 200);
+            $params = array('order' => 'desc', 'limit' => $page_size);
             if ($cursor) {
                 $params['cursor'] = $cursor;
             }
@@ -173,10 +178,17 @@ class REAL8_Stellar_Payment_API {
 
             $records = isset($tx_data['_embedded']['records']) && is_array($tx_data['_embedded']['records']) ? $tx_data['_embedded']['records'] : array();
             if (empty($records)) {
-                break;
+                return false;
             }
 
             foreach ($records as $tx) {
+                if ($not_before > 0 && isset($tx['created_at'])) {
+                    $tx_ts = strtotime((string) $tx['created_at']);
+                    if ($tx_ts && $tx_ts < $not_before) {
+                        return false; // everything from here on predates this payment
+                    }
+                }
+
                 // Settlement requires a successful transaction with a text memo.
                 if (($tx['successful'] ?? false) !== true) {
                     continue;
@@ -201,20 +213,22 @@ class REAL8_Stellar_Payment_API {
                 }
             }
 
+            // A short page is the end of the account's history.
+            if (count($records) < $page_size) {
+                return false;
+            }
+
             // paginate using last paging_token
             $last = end($records);
             $cursor = (is_array($last) && isset($last['paging_token'])) ? (string) $last['paging_token'] : '';
             if (!$cursor) {
-                break;
+                return new WP_Error('horizon_json', __('Invalid response from Stellar.', 'real8-gateway'));
             }
 
             $pages++;
         }
 
-        if ($pages >= 5 && $cursor) {
-            return new WP_Error('scan_limit', __('Stellar history verification is incomplete. Please reconcile this payment manually.', 'real8-gateway'));
-        }
-        return false;
+        return new WP_Error('scan_limit', __('Stellar history verification is incomplete. Please reconcile this payment manually.', 'real8-gateway'));
     }
 
     /** Verify the destination asset and amount in a memo-matched transaction. */
@@ -256,7 +270,7 @@ class REAL8_Stellar_Payment_API {
                     continue;
                 }
             } else {
-                if (!isset($op['asset_code']) || strtoupper((string) $op['asset_code']) !== strtoupper((string) $asset_code)) {
+                if (!isset($op['asset_code']) || (string) $op['asset_code'] !== (string) $asset_code) {
                     continue;
                 }
                 if ($asset_issuer && (!isset($op['asset_issuer']) || (string) $op['asset_issuer'] !== (string) $asset_issuer)) {
@@ -591,9 +605,12 @@ class REAL8_Stellar_Payment_API {
      * @param string $asset_code Asset code to look for
      * @param string|null $asset_issuer Asset issuer (null for XLM)
      * @param string $since_cursor Cursor for pagination (optional)
-     * @return array|false Payment details or false if not found
+     * @param int $not_before Unix time before which no transaction can belong
+     *                        to this payment; bounds the history scan (0 = unbounded)
+     * @return array|false|WP_Error Payment details, false if not found, or an
+     *                              error when verification could not be completed
      */
-    public function check_payment($merchant_address, $memo, $expected_amount, $asset_code = 'REAL8', $asset_issuer = null, $since_cursor = null) {
+    public function check_payment($merchant_address, $memo, $expected_amount, $asset_code = 'REAL8', $asset_issuer = null, $since_cursor = null, $not_before = 0) {
         $token = REAL8_Token_Registry::get_token($asset_code);
         if (!$token || !$this->validate_stellar_address($merchant_address) || !is_numeric($expected_amount) || !is_finite((float) $expected_amount) || (float) $expected_amount <= 0) {
             return new WP_Error('invalid_payment', __('Invalid token configuration.', 'real8-gateway'));
@@ -603,7 +620,7 @@ class REAL8_Stellar_Payment_API {
             return new WP_Error('invalid_asset', __('Invalid token configuration.', 'real8-gateway'));
         }
         // Robust implementation: check recent transactions first (memo available directly).
-        $result = $this->check_payment_via_transactions($merchant_address, $memo, $expected_amount, $asset_code, $asset_issuer);
+        $result = $this->check_payment_via_transactions($merchant_address, $memo, $expected_amount, $asset_code, $asset_issuer, $not_before);
 
         if (is_wp_error($result)) {
             return $result;
@@ -614,11 +631,11 @@ class REAL8_Stellar_Payment_API {
         }
 
         // Fallback to legacy payments scan (best effort, may be skipped if too many payments)
-        return $this->check_payment_legacy($merchant_address, $memo, $expected_amount, $asset_code, $asset_issuer, $since_cursor);
+        return $this->check_payment_legacy($merchant_address, $memo, $expected_amount, $asset_code, $asset_issuer, $since_cursor, $not_before);
     }
 
 
-    private function check_payment_legacy($merchant_address, $memo, $expected_amount, $asset_code = 'REAL8', $asset_issuer = null, $since_cursor = null) {
+    private function check_payment_legacy($merchant_address, $memo, $expected_amount, $asset_code = 'REAL8', $asset_issuer = null, $since_cursor = null, $not_before = 0) {
         // Query Stellar Horizon for payments to this address
         $url = REAL8_GW_HORIZON_URL . '/accounts/' . $merchant_address . '/payments';
         $params = array(
@@ -645,6 +662,14 @@ class REAL8_Stellar_Payment_API {
 
         // Look through payments for matching memo and amount
         foreach ($data['_embedded']['records'] as $payment) {
+            // Newest first: nothing older than the payment being verified can settle it.
+            if ($not_before > 0 && isset($payment['created_at'])) {
+                $op_ts = strtotime((string) $payment['created_at']);
+                if ($op_ts && $op_ts < (int) $not_before) {
+                    break;
+                }
+            }
+
             // Only process payment operations
             if (($payment['type'] ?? '') !== 'payment' || ($payment['to'] ?? '') !== $merchant_address) {
                 continue;

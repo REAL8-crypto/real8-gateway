@@ -75,6 +75,13 @@ class REAL8_Gateway {
         
         // REST API endpoints (fallback when caches block wc-ajax)
         add_action('rest_api_init', array($this, 'register_rest_routes'));
+
+        // WC-AJAX endpoints. Registered here, not in the gateway constructor:
+        // WooCommerce instantiates gateways lazily, and on a wc-ajax request
+        // nothing has built them by the time the action fires, so hooks added
+        // by the gateway itself were never there to answer.
+        add_action('wc_ajax_real8_check_payment_status', array($this, 'wc_ajax_check_payment_status'));
+        add_action('wc_ajax_stellar_get_token_prices', array($this, 'wc_ajax_get_token_prices'));
         add_filter('plugin_action_links_' . plugin_basename(REAL8_GATEWAY_PLUGIN_FILE), array($this, 'add_settings_link'));
         register_activation_hook(REAL8_GATEWAY_PLUGIN_FILE, array($this, 'activate'));
         register_deactivation_hook(REAL8_GATEWAY_PLUGIN_FILE, array($this, 'deactivate'));
@@ -107,14 +114,20 @@ class REAL8_Gateway {
         $this->maybe_migrate_settings();
         if (get_option('real8_gateway_db_version') !== REAL8_GATEWAY_DB_VERSION) {
             $this->create_tables();
-            $this->migrate_database();
+            if ($this->tables_exist()) {
+                $this->migrate_database();
+            } elseif (!get_transient('real8_gateway_schema_error')) {
+                // Without both tables no payment can be confirmed. Leave the
+                // schema version alone so the next load tries again, and say so.
+                set_transient('real8_gateway_schema_error', 1, HOUR_IN_SECONDS);
+                real8_gateway_log('REAL8 Gateway: could not create its database tables. Payments cannot be confirmed until the database user may create tables.');
+            }
         }
 
         // Self-healing cron (v4.5.1): scheduling used to happen only in the
         // activation hook, so a plugin update by file replacement (or any
         // event loss) left the payment monitor permanently unscheduled;
-        // found 2026-07-13 with the cron missing on BOTH production sites,
-        // orders confirming only via browser-side thank-you polling.
+        // orders then confirmed only via browser-side thank-you polling.
         $this->schedule_payment_checks();
     }
 
@@ -124,17 +137,35 @@ class REAL8_Gateway {
      */
     private function maybe_migrate_settings() {
         $stored_version = get_option('real8_gateway_settings_version', '0');
-        if (version_compare($stored_version, '4.3.6', '>=')) {
+        if (version_compare($stored_version, '4.6.0', '>=')) {
             return;
         }
 
         $settings = get_option('woocommerce_real8_payment_settings', array());
-        if (empty($settings)) {
+        if (empty($settings) || !is_array($settings)) {
             update_option('real8_gateway_settings_version', REAL8_GATEWAY_VERSION);
             return;
         }
 
         $changed = false;
+
+        // 4.6.0 made the hosted wallet redirect an explicit setting. Until then
+        // a merchant switched it on by defining REAL8_PAYMENT_INTENT_SECRET in
+        // wp-config.php. A store that already runs it keeps it; new
+        // installations start with it off.
+        if (!isset($settings['payment_intents'])
+            && defined('REAL8_PAYMENT_INTENT_SECRET') && is_string(REAL8_PAYMENT_INTENT_SECRET) && REAL8_PAYMENT_INTENT_SECRET !== '') {
+            $settings['payment_intents'] = 'yes';
+            $changed = true;
+        }
+
+        if (version_compare($stored_version, '4.3.6', '>=')) {
+            if ($changed) {
+                update_option('woocommerce_real8_payment_settings', $settings);
+            }
+            update_option('real8_gateway_settings_version', REAL8_GATEWAY_VERSION);
+            return;
+        }
 
         // Migrate title: replace old Stellar references
         if (!empty($settings['title']) && stripos($settings['title'], 'Stellar') !== false) {
@@ -200,6 +231,35 @@ class REAL8_Gateway {
 
 
     /**
+     * The gateway instance WooCommerce holds, or null when unavailable.
+     *
+     * @return REAL8_WC_Payment_Gateway|null
+     */
+    private function get_gateway() {
+        if (!function_exists('WC') || !class_exists('REAL8_WC_Payment_Gateway')) {
+            return null;
+        }
+        $gateways = WC()->payment_gateways()->payment_gateways();
+        return (isset($gateways['real8_payment']) && $gateways['real8_payment'] instanceof REAL8_WC_Payment_Gateway) ? $gateways['real8_payment'] : null;
+    }
+
+    public function wc_ajax_check_payment_status() {
+        $gateway = $this->get_gateway();
+        if (!$gateway) {
+            wp_send_json_error(array('message' => __('REAL8 Payments is not configured.', 'real8-gateway')), 503);
+        }
+        $gateway->ajax_check_payment_status();
+    }
+
+    public function wc_ajax_get_token_prices() {
+        $gateway = $this->get_gateway();
+        if (!$gateway) {
+            wp_send_json_error(array('message' => __('REAL8 Payments is not configured.', 'real8-gateway')), 503);
+        }
+        $gateway->ajax_get_token_prices();
+    }
+
+    /**
      * Add Settings link to plugins page
      */
     public function add_settings_link($links) {
@@ -220,13 +280,29 @@ class REAL8_Gateway {
 
     public function activate() {
         $this->create_tables();
-        $this->migrate_database();
+        if ($this->tables_exist()) {
+            $this->migrate_database();
+        }
         $this->set_default_options();
         $this->schedule_payment_checks();
     }
 
     public function deactivate() {
         $this->unschedule_payment_checks();
+    }
+
+    /**
+     * Whether both plugin tables are present.
+     */
+    private function tables_exist() {
+        global $wpdb;
+        foreach (array('real8_payments', 'real8_transaction_claims') as $name) {
+            $table = $wpdb->prefix . $name;
+            if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($table))) !== $table) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private function create_tables() {
@@ -417,14 +493,12 @@ class REAL8_Gateway {
             return $send_error(__('Invalid order', 'real8-gateway'), 'invalid_order');
         }
 
+        // Security: require a valid order key for guest checks. Same answer
+        // for an unknown order and a wrong key, so the endpoint does not
+        // reveal which order numbers exist.
         $order = wc_get_order($order_id);
-        if (!$order) {
-            return $send_error(__('Order not found', 'real8-gateway'), 'order_not_found');
-        }
-
-        // Security: require a valid order key for guest checks.
-        if (!$order_key || !hash_equals($order->get_order_key(), $order_key)) {
-            return $send_error(__('Invalid order', 'real8-gateway'), 'invalid_order_key');
+        if (!$order || !$order_key || !hash_equals($order->get_order_key(), $order_key)) {
+            return $send_error(__('Invalid order', 'real8-gateway'), 'invalid_order');
         }
 
         // Ensure this order uses this gateway.
@@ -446,7 +520,7 @@ class REAL8_Gateway {
 
         // Expiry handling (keep DB + order consistent). v4.5.3: one last Horizon
         // check before expiring, never expire on a failed lookup (same policy as
-        // the cron monitor since v4.5.1; audit 2026-08-19, WP-1).
+        // the cron monitor since v4.5.1).
         $expires_at = strtotime($payment->expires_at);
         if ($expires_at && time() > $expires_at && $payment->status === 'pending') {
             $late = class_exists('REAL8_Payment_Monitor')
@@ -461,7 +535,7 @@ class REAL8_Gateway {
                         'status'      => 'pending',
                         'message'     => __('Payment window has expired; final verification pending', 'real8-gateway'),
                         'expires_in'  => 0,
-                        'check_error' => $late->get_error_message(),
+                        'check_error' => class_exists('REAL8_Payment_Monitor') ? \REAL8_Payment_Monitor::get_instance()->customer_error_message($late) : '',
                     ),
                 ), 200);
             } else {
@@ -505,7 +579,7 @@ class REAL8_Gateway {
             if (class_exists('REAL8_Payment_Monitor')) {
                 $result = REAL8_Payment_Monitor::get_instance()->manual_check_order($order_id);
                 if (is_wp_error($result)) {
-                    $check_error = $result->get_error_message();
+                    $check_error = REAL8_Payment_Monitor::get_instance()->customer_error_message($result);
                 }
             } else {
                 $check_error = __('Payment monitor not available.', 'real8-gateway');

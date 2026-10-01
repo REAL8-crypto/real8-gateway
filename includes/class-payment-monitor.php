@@ -11,7 +11,7 @@
 
 // Payment records use plugin-owned tables; WooCommerce CRUD handles orders.
 // Verification and atomic claims require fresh reads; caching could settle stale rows.
-// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 if (!defined('ABSPATH')) {
     exit;
@@ -91,21 +91,29 @@ class REAL8_Payment_Monitor {
         // (v4.5.1): expiring without one last Horizon check lost payments
         // made in time but seen late. With a cron gap longer than the
         // payment window, a customer who paid within minutes still had the
-        // order expire and get cancelled (prowoos order 10214, 2026-07-10).
+        // order expire and get cancelled.
         $result = $this->stellar_api->check_payment(
             $merchant_address,
             trim((string) $payment->memo),
             $expected_amount,
             $asset_code,
-            $asset_issuer
+            $asset_issuer,
+            null,
+            $this->scan_not_before($payment)
         );
 
         if (is_wp_error($result)) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 real8_gateway_log('REAL8 Gateway: check_single_payment error: ' . $result->get_error_message());
             }
-            // Never expire on a failed lookup — a Horizon hiccup at the
-            // deadline must not discard a possibly-settled payment.
+            // Never expire on a failed lookup: a Horizon hiccup at the
+            // deadline must not discard a possibly-settled payment. The wait
+            // is bounded, though. A row that still cannot be verified long
+            // after its deadline is closed for manual reconciliation instead
+            // of being re-scanned every minute forever.
+            if ($this->verification_wait_exceeded($payment)) {
+                $this->expire_payment($payment, $result);
+            }
             return;
         }
 
@@ -114,13 +122,66 @@ class REAL8_Payment_Monitor {
         }
 
         if ($result) {
-            $this->mark_payment_confirmed($payment, $result, $asset_code);
+            $confirmed = $this->mark_payment_confirmed($payment, $result, $asset_code);
+            if (is_wp_error($confirmed)) {
+                real8_gateway_log(sprintf('REAL8 Gateway: payment found for order #%d (TX: %s) but it could not be recorded: %s', (int) $payment->order_id, isset($result['tx_hash']) ? $result['tx_hash'] : '?', $confirmed->get_error_message()));
+            }
             return;
         }
 
         if ($is_past_deadline) {
             $this->mark_payment_expired($payment);
         }
+    }
+
+    /**
+     * Earliest moment a transaction for this payment row can carry. Nothing
+     * older can settle it (see tx_is_plausibly_for_payment()), so the history
+     * scan stops there instead of walking the whole account.
+     *
+     * @param object $payment Payment row
+     * @return int Unix time, or 0 when the row has no usable creation time
+     */
+    private function scan_not_before($payment) {
+        $row_ts = isset($payment->created_at) ? strtotime((string) $payment->created_at) : false;
+        return $row_ts ? max(0, $row_ts - 60) : 0;
+    }
+
+    /**
+     * Whether a row has stayed unverifiable for too long after its deadline.
+     *
+     * @param object $payment Payment row
+     * @return bool
+     */
+    private function verification_wait_exceeded($payment) {
+        $expires_ts = isset($payment->expires_at) ? strtotime((string) $payment->expires_at) : false;
+        if (!$expires_ts) {
+            return false;
+        }
+        /**
+         * Seconds after the payment deadline during which a failing
+         * verification keeps the payment pending.
+         *
+         * @param int $seconds Default one day.
+         */
+        $wait = (int) apply_filters('real8_gateway_unverified_wait_seconds', DAY_IN_SECONDS);
+        return time() > $expires_ts + max(HOUR_IN_SECONDS, $wait);
+    }
+
+    /**
+     * Message that is safe to show a customer for a failed status check.
+     * Transport and service details stay in the log.
+     *
+     * @param WP_Error $error Error from manual_check_order()
+     * @return string
+     */
+    public function customer_error_message($error) {
+        $public = array('verification_throttled', 'already_paid', 'expired', 'not_found', 'scan_limit');
+        if (in_array($error->get_error_code(), $public, true)) {
+            return $error->get_error_message();
+        }
+        real8_gateway_log('REAL8 Gateway: payment status check failed: ' . $error->get_error_code() . ' ' . $error->get_error_message());
+        return __('Payment verification is temporarily unavailable. Please try again shortly.', 'real8-gateway');
     }
 
     /**
@@ -171,6 +232,14 @@ class REAL8_Payment_Monitor {
         if (!$order || $order->is_paid() || $order->has_status('refunded') || $order->get_meta('_real8_manual_review')) {
             return false;
         }
+        // An order that was completed once carries a paid date. If it is no
+        // longer in a paid status, someone changed it on purpose (cancelled,
+        // put on hold, refunded by hand); that is not a detached confirmation
+        // and must not be undone. One attempt per order, so an order that
+        // cannot be completed (custom status, trash) is not retried every minute.
+        if ($order->get_date_paid() || $order->get_meta('_real8_repair_attempted')) {
+            return false;
+        }
 
         $asset_code = isset($payment->asset_code) ? $payment->asset_code : 'REAL8';
         $order->add_order_note(sprintf(
@@ -184,6 +253,15 @@ class REAL8_Payment_Monitor {
             'from'       => __('(not recorded)', 'real8-gateway'),
             'created_at' => $payment->paid_at,
         ), $asset_code);
+
+        $order = wc_get_order($payment->order_id);
+        if ($order && !$order->is_paid() && !$order->get_meta('_real8_manual_review')) {
+            $order->update_meta_data('_real8_repair_attempted', (string) time());
+            $order->add_order_note(__('The order could not be completed automatically from its confirmed REAL8 payment. Review it manually.', 'real8-gateway'));
+            $order->save();
+            real8_gateway_log(sprintf('REAL8 Gateway: order #%d could not be completed from confirmed payment row %d', (int) $payment->order_id, (int) $payment->id));
+            return false;
+        }
 
         real8_gateway_log(sprintf('REAL8 Gateway: repaired order #%d from confirmed payment row %d (TX: %s)', (int) $payment->order_id, (int) $payment->id, $payment->stellar_tx_hash));
         return true;
@@ -207,11 +285,14 @@ class REAL8_Payment_Monitor {
      * without looking at its status at all (issue #11). One claim here, shared
      * by all three, and the order is touched only by the caller that won it.
      *
-     * @param object $payment Payment row as read earlier by the caller
+     * @param object        $payment    Payment row as read earlier by the caller
+     * @param WP_Error|null $unverified Set when the row is closed because
+     *                                  verification kept failing, not because
+     *                                  a completed check found no payment
      * @return bool True if this call expired the row, false if it was no
      *              longer pending (confirmed meanwhile, or already expired)
      */
-    public function expire_payment($payment) {
+    public function expire_payment($payment, $unverified = null) {
         global $wpdb;
         $table = $wpdb->prefix . 'real8_payments';
 
@@ -232,6 +313,21 @@ class REAL8_Payment_Monitor {
 
         // Update order status with detailed note
         $order = wc_get_order($payment->order_id);
+        if ($order && is_wp_error($unverified)) {
+            $order->add_order_note(sprintf(
+                /* translators: 1: expected amount, 2: token code, 3: payment memo, 4: technical reason. */
+                __('Payment could NOT be verified on Stellar and automatic checks have stopped. Expected: %1$s %2$s. Memo: %3$s. Reason: %4$s. Check the merchant account for this memo before treating the order as unpaid.', 'real8-gateway'),
+                number_format($amount, 7),
+                $asset_code,
+                $memo,
+                $unverified->get_error_message()
+            ));
+            if ($order->has_status('pending')) {
+                $order->update_status('on-hold');
+            }
+            real8_gateway_log(sprintf('REAL8 Gateway: stopped checking unverifiable payment for order #%d (%s)', $payment->order_id, $unverified->get_error_code()));
+            return true;
+        }
         if ($order && $order->has_status('pending')) {
             // Add detailed expiration note
             $order->add_order_note(sprintf(
@@ -289,8 +385,7 @@ class REAL8_Payment_Monitor {
         }
 
         // Atomic claim: cron and the browser-side check can both find the
-        // payment; only the one that flips the row proceeds to payment_complete
-        // (audit 2026-08-19, WP-11).
+        // payment; only the one that flips the row proceeds to payment_complete.
         $claimed = $wpdb->query($wpdb->prepare(
             "UPDATE %i SET status = 'confirmed', stellar_tx_hash = %s, paid_at = %s WHERE id = %d AND status <> 'confirmed'",
             $table,
@@ -459,8 +554,8 @@ class REAL8_Payment_Monitor {
 
         $expiring_soon = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM %i
              WHERE status = 'pending'
-             AND expires_at < DATE_ADD(NOW(), INTERVAL 5 MINUTE)
-             AND expires_at > NOW()", $table)
+             AND expires_at < DATE_ADD(UTC_TIMESTAMP(), INTERVAL 5 MINUTE)
+             AND expires_at > UTC_TIMESTAMP()", $table)
         );
 
         if ($expiring_soon > 0) {
@@ -546,7 +641,9 @@ class REAL8_Payment_Monitor {
             trim((string) $payment->memo),
             $expected_amount,
             $asset_code,
-            $asset_issuer
+            $asset_issuer,
+            null,
+            $this->scan_not_before($payment)
         );
 
         if (is_wp_error($result)) {
@@ -657,7 +754,7 @@ class REAL8_Payment_Monitor {
 // registering another init callback at the same priority from inside the
 // running hook is silently skipped by WP_Hook, so the monitor never
 // instantiated on cron/front-end loads and real8_gateway_check_payments had
-// no callback at all (verified with has_action() in production 2026-07-13).
+// no callback at all.
 // The Stellar API class this constructor needs is required before this file
 // in include_files(), so direct instantiation is safe here.
 REAL8_Payment_Monitor::get_instance();

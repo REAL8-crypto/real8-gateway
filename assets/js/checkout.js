@@ -118,11 +118,6 @@
                 force: force ? 1 : 0
             };
 
-            // Nonce is optional; backend validates it when present
-            if (real8_gateway.nonce) {
-                data.nonce = real8_gateway.nonce;
-            }
-
             // Normalize endpoint placeholder and bypass aggressive HTML caches
             var ajaxUrl = wcUrl;
             if (ajaxUrl.indexOf('%%endpoint%%') !== -1) {

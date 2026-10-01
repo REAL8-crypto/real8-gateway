@@ -19,6 +19,7 @@ class REAL8_Blocks_Payment_Method extends \Automattic\WooCommerce\Blocks\Payment
     public function is_active() {
         return ($this->settings['enabled'] ?? 'no') === 'yes'
             && !empty($this->settings['merchant_address'])
+            && preg_match('/^G[A-Z2-7]{55}$/D', (string) $this->settings['merchant_address'])
             && get_woocommerce_currency() === 'USD';
     }
 

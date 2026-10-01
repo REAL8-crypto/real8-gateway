@@ -71,7 +71,7 @@ No. The gateway and REAL8 price equivalents are disabled for other store currenc
 No for local payment instructions, prices and Stellar verification. The optional hosted wallet redirect requires REAL8_PAYMENT_INTENT_SECRET in wp-config.php and the hosted redirect checkbox. Obtain service access before configuring this credential; never put a secret in the plugin files.
 
 = What if a payment is late or verification is unavailable? =
-The server checks Horizon before expiring a payment. Network errors leave it pending for verification. Payments sent after an order is expired require merchant reconciliation. A payment for an order whose total, currency or payment method changed after quoting is recorded and held for merchant review. Contact the store with the transaction hash if a payment is not credited. Check cron and WooCommerce > Status > Logs.
+The server checks Horizon before expiring a payment. Network errors leave it pending for verification; if it still cannot be verified a day after its deadline, the order is put on hold with a note for the merchant. Payments sent after an order is expired require merchant reconciliation. A payment for an order whose total, currency or payment method changed after quoting is recorded and held for merchant review. Contact the store with the transaction hash if a payment is not credited. Check cron and WooCommerce > Status > Logs.
 
 = Are subscriptions and automatic refunds supported? =
 The gateway supports one-time product payments. It does not automatically debit renewals or issue on-chain refunds. Some subscription plugins may permit manual renewal payments; test your combination before use.
@@ -83,6 +83,7 @@ The gateway supports one-time product payments. It does not automatically debit 
 * Native Checkout block integration and removal of the external plugin updater.
 * Explicit opt-in for hosted payment-intent redirects.
 * Hardened payment destinations, transaction claims, quote handling and final verification.
+* Existing stores that used the hosted wallet redirect keep it after upgrading.
 
 = 4.5.4 =
 * Repair confirmed payments whose WooCommerce orders were not completed.

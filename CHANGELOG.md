@@ -23,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Continue browser verification after the countdown ends; enqueue QR scripts and extract inline template assets.
 - Bound absolute underpayment tolerance, validate hosted redirect responses, escape output and improve translation metadata.
 - Declare gateway properties for PHP 8.2+, repair admin script names and scope notices to gateway settings.
+- Bound the Stellar history scan by the age of the payment being verified, so an unpaid order on a busy merchant account expires normally; a payment that stays unverifiable for a day past its deadline is put on hold for manual reconciliation instead of being checked forever.
+- The repair of confirmed payments completes an order only if it was never completed; an order the merchant later cancels or puts on hold is left as the merchant set it.
+- A confirmation that lands while the customer re-submits checkout is no longer replaced by a new quote.
+- A store that already used the hosted wallet redirect keeps it after upgrading; new installations start with it off.
+- The WC-AJAX status and price endpoints answer again. They were registered by the gateway object, which WooCommerce had not built yet on a wc-ajax request, so every status check fell through to the REST fallback.
+- Status checks rely on the order key alone, answer alike for an unknown order and a wrong key, and show customers a plain message instead of transport errors.
 
 ## [4.5.4] - 2026-09-22
 
