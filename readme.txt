@@ -1,4 +1,5 @@
 === REAL8 Gateway for WooCommerce ===
+Contributors: real8
 Tags: woocommerce, payments, stellar, real8
 Requires at least: 6.5
 Tested up to: 7.1
@@ -32,6 +33,8 @@ REAL8 pricing API (https://api.real8.org)
 * Sent: a price request; no customer name, email, billing address or order access key is sent for pricing.
 * No account or API key is needed for price requests. A network connection is required.
 * Service documentation: https://api.real8.org/
+* Terms: https://real8.org/en/terms-of-service/
+* Privacy: https://real8.org/en/privacy-policy/
 
 Stellar Horizon (https://horizon.stellar.org)
 * Purpose: validate the configured merchant wallet and verify incoming payments.
@@ -48,6 +51,8 @@ REAL8 Wallet (https://app.real8.org)
 * A direct wallet link sends the public destination address, token amount, asset code and text memo in URL parameters. It does not send the WooCommerce order key.
 * Hosted intents: only with the opt-in setting and REAL8_PAYMENT_INTENT_SECRET in wp-config.php, WordPress sends the order ID, token and USD amounts, asset code and issuer, public destination, memo, expiry and return URL INCLUDING the WooCommerce order access key to https://api.real8.org/payment-intents. It reports the intent ID and transaction hash to /payment-intents/{id}/paid after confirmation. These details are available to the hosted service; the return URL grants access to the order. No customer name, email or billing address is explicitly included.
 * Customers need a funded Stellar wallet holding REAL8 to send payment. Merchants without a hosted-service credential can use the complete local instruction flow.
+* Terms: https://real8.org/en/terms-of-service/
+* Privacy: https://real8.org/en/privacy-policy/
 
 = Privacy and stored data =
 
