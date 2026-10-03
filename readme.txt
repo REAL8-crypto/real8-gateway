@@ -5,7 +5,7 @@ Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 7.4
 Requires Plugins: woocommerce
-Stable tag: 4.6.0
+Stable tag: 4.6.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,9 @@ The server checks Horizon before expiring a payment. Network errors leave it pen
 The gateway supports one-time product payments. It does not automatically debit renewals or issue on-chain refunds. Some subscription plugins may permit manual renewal payments; test your combination before use.
 
 == Changelog ==
+
+= 4.6.1 =
+* Plugin renamed to REAL8 Gateway.
 
 = 4.6.0 =
 * WordPress.org package, dependency metadata, license notices and service disclosures.

@@ -3,7 +3,7 @@
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: REAL8 Gateway 4.6.0\n"
+"Project-Id-Version: REAL8 Gateway 4.6.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/real8-gateway\n"
 "POT-Creation-Date: 2026-10-01T21:56:10+00:00\n"
 "PO-Revision-Date: 2026-10-01 20:55+0000\n"

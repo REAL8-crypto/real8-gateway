@@ -1,7 +1,7 @@
 # REAL8 Gateway
 
 ![WordPress Plugin](https://img.shields.io/badge/WordPress-Plugin-blue.svg)
-![Version](https://img.shields.io/badge/version-4.6.0-green.svg)
+![Version](https://img.shields.io/badge/version-4.6.1-green.svg)
 ![License](https://img.shields.io/badge/license-GPL--2.0%2B-blue.svg)
 ![PHP](https://img.shields.io/badge/PHP-7.4%2B-purple.svg)
 ![WordPress](https://img.shields.io/badge/WordPress-6.5%2B-0073aa.svg)
