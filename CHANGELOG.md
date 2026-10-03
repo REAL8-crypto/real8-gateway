@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to REAL8 Gateway for WooCommerce will be documented in this file.
+All notable changes to REAL8 Gateway will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -322,7 +322,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2025-12-29
 
 ### Added
-- Initial release of REAL8 Gateway for WooCommerce
+- Initial release of REAL8 Gateway
 - Stellar REAL8 payment acceptance
 - Real-time pricing from api.real8.org/prices
 - Automatic payment detection via WordPress cron (every minute)

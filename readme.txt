@@ -1,4 +1,4 @@
-=== REAL8 Gateway for WooCommerce ===
+=== REAL8 Gateway ===
 Contributors: real8
 Tags: woocommerce, payments, stellar, real8
 Requires at least: 6.5

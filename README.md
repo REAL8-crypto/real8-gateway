@@ -1,4 +1,4 @@
-# REAL8 Gateway for WooCommerce
+# REAL8 Gateway
 
 ![WordPress Plugin](https://img.shields.io/badge/WordPress-Plugin-blue.svg)
 ![Version](https://img.shields.io/badge/version-4.6.0-green.svg)

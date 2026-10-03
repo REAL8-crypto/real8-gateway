@@ -1,9 +1,9 @@
-# Spanish (Spain) translation for REAL8 Gateway for WooCommerce
+# Spanish (Spain) translation for REAL8 Gateway
 # Copyright (C) 2026 REAL8
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: REAL8 Gateway for WooCommerce 4.6.0\n"
+"Project-Id-Version: REAL8 Gateway 4.6.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/real8-gateway\n"
 "POT-Creation-Date: 2026-10-01T21:56:10+00:00\n"
 "PO-Revision-Date: 2026-10-01 20:55+0000\n"
@@ -17,8 +17,8 @@ msgstr ""
 
 #. Plugin Name of the plugin
 #: real8-gateway.php
-msgid "REAL8 Gateway for WooCommerce"
-msgstr "Pasarela REAL8 para WooCommerce"
+msgid "REAL8 Gateway"
+msgstr "Pasarela REAL8"
 
 #. Plugin URI of the plugin
 #. Author URI of the plugin

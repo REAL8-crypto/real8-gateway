@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: REAL8 Gateway for WooCommerce
+ * Plugin Name: REAL8 Gateway
  * Plugin URI: https://real8.org
  * Description: Accept REAL8 token payments on the Stellar blockchain for WooCommerce orders
  * Version: 4.6.0
