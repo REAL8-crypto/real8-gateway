@@ -13,6 +13,8 @@ Accept REAL8 token payments on Stellar for USD WooCommerce orders, with local pa
 
 == Description ==
 
+REAL8 Gateway is built for REAL8, the Stellar asset of the REAL8 Project. This version accepts REAL8 only.
+
 REAL8 Gateway adds a REAL8 payment method to WooCommerce's classic checkout and Checkout block. Customers send REAL8 directly to the merchant's public Stellar address with a unique text memo. WordPress verifies the transaction using Stellar Horizon and marks the WooCommerce order paid.
 
 Requirements: WooCommerce 8.3 or later, a USD store, and a funded Stellar mainnet account with a REAL8 trustline. This plugin does not hold funds or ask for private keys. Refunds are handled manually in the merchant's wallet; recording a WooCommerce refund does not send tokens.
