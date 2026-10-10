@@ -15,6 +15,8 @@ destination.parent.mkdir(exist_ok=True)
 files = [root / name for name in ("real8-gateway.php", "readme.txt", "LICENSE", "THIRD-PARTY-NOTICES.txt")]
 for directory in ("includes", "assets/js", "assets/css", "languages"):
     files.extend(p for p in (root / directory).rglob("*") if p.is_file())
+# WordPress.org serves translations from translate.wordpress.org; only the template ships.
+files = [p for p in files if p.suffix not in (".po", ".mo")]
 with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as archive:
     for path in sorted(files):
         entry = zipfile.ZipInfo("real8-gateway/" + str(path.relative_to(root)), (2026, 10, 1, 0, 0, 0))

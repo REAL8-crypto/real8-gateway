@@ -3,7 +3,7 @@
  * Plugin Name: REAL8 Gateway
  * Plugin URI: https://github.com/REAL8-crypto/real8-gateway
  * Description: Accept REAL8 token payments on the Stellar blockchain for WooCommerce orders
- * Version: 4.6.1
+ * Version: 4.6.2
  * Author: REAL8
  * Author URI: https://real8.org
  * License: GPL-2.0-or-later
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('REAL8_GATEWAY_VERSION', '4.6.1');
+define('REAL8_GATEWAY_VERSION', '4.6.2');
 define('REAL8_GATEWAY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('REAL8_GATEWAY_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('REAL8_GATEWAY_PLUGIN_FILE', __FILE__);
@@ -91,19 +91,9 @@ class REAL8_Gateway {
     }
 
     public function check_dependencies() {
-        if (!class_exists('WooCommerce')) {
-            add_action('admin_notices', array($this, 'woocommerce_missing_notice'));
-            return false;
-        }
-        return true;
-    }
-
-    public function woocommerce_missing_notice() {
-        ?>
-        <div class="error">
-            <p><?php esc_html_e('REAL8 Gateway requires WooCommerce to be installed and active.', 'real8-gateway'); ?></p>
-        </div>
-        <?php
+        // The "Requires Plugins: woocommerce" header makes WordPress refuse
+        // activation without WooCommerce, so no admin notice is needed here.
+        return class_exists('WooCommerce');
     }
 
     public function init() {
