@@ -1,5 +1,5 @@
 === REAL8 Gateway ===
-Contributors: real8
+Contributors: real8, prowoos
 Tags: woocommerce, payments, stellar, real8
 Requires at least: 6.5
 Tested up to: 7.1
@@ -23,38 +23,38 @@ Features include a configurable payment window, price buffer, bounded underpayme
 
 Customers can pay with any Stellar wallet that supports REAL8 and text memos. The REAL8 Wallet link is optional for customers. Hosted payment-intent redirects are disabled by default and require a separately configured service credential.
 
-Source and development documentation: https://github.com/REAL8-crypto/real8-gateway
+Source and development documentation: [https://github.com/REAL8-crypto/real8-gateway](https://github.com/REAL8-crypto/real8-gateway)
 
 = External services =
 
 Enabling and configuring REAL8 Payments authorizes the price and blockchain requests described below. Activation alone does not request prices, validate a wallet or contact an update service. Network providers receive the sending server's IP address and HTTP request metadata, including the WordPress version and site URL in the default HTTP User-Agent. Wallet visits expose the customer's IP address and browser metadata to the wallet provider.
 
-REAL8 pricing API (https://api.real8.org)
-* Purpose: fetch current REAL8/USD prices from https://api.real8.org/prices.
+REAL8 pricing API ([api.real8.org](https://api.real8.org))
+* Purpose: fetch current REAL8/USD prices from [https://api.real8.org/prices](https://api.real8.org/prices).
 * When: payment quotes and enabled shop price equivalents, cached for 60 seconds.
 * Sent: a price request; no customer name, email, billing address or order access key is sent for pricing.
 * No account or API key is needed for price requests. A network connection is required.
-* Service documentation: https://api.real8.org/
-* Terms: https://real8.org/en/terms-of-service/
-* Privacy: https://real8.org/en/privacy-policy/
+* Service documentation: [https://api.real8.org/](https://api.real8.org/)
+* Terms: [https://real8.org/en/terms-of-service/](https://real8.org/en/terms-of-service/)
+* Privacy: [https://real8.org/en/privacy-policy/](https://real8.org/en/privacy-policy/)
 
-Stellar Horizon (https://horizon.stellar.org)
+Stellar Horizon ([horizon.stellar.org](https://horizon.stellar.org))
 * Purpose: validate the configured merchant wallet and verify incoming payments.
 * When: after a public address has been saved in settings, every minute while payments await verification, and during customer payment status checks.
 * Sent: merchant public Stellar address, transaction hashes and pagination parameters. Asset code and issuer may be used for orderbook requests by the legacy token API.
 * No account or API key is required. Transaction data, addresses and text memos on Stellar are public and permanent.
-* Documentation: https://developers.stellar.org/docs/data/apis/horizon
-* Terms: https://stellar.org/terms-of-service
-* Privacy: https://stellar.org/privacy-policy
+* Documentation: [https://developers.stellar.org/docs/data/apis/horizon](https://developers.stellar.org/docs/data/apis/horizon)
+* Terms: [https://stellar.org/terms-of-service](https://stellar.org/terms-of-service)
+* Privacy: [https://stellar.org/privacy-policy](https://stellar.org/privacy-policy)
 
-REAL8 Wallet (https://app.real8.org)
+REAL8 Wallet ([app.real8.org](https://app.real8.org))
 * Purpose: an optional customer-facing wallet page with payment details prefilled.
 * When: a customer clicks or scans the wallet link, or when the merchant separately enables hosted payment-intent redirects.
 * A direct wallet link sends the public destination address, token amount, asset code and text memo in URL parameters. It does not send the WooCommerce order key.
-* Hosted intents: only with the opt-in setting and REAL8_PAYMENT_INTENT_SECRET in wp-config.php, WordPress sends the order ID, token and USD amounts, asset code and issuer, public destination, memo, expiry and return URL INCLUDING the WooCommerce order access key to https://api.real8.org/payment-intents. It reports the intent ID and transaction hash to /payment-intents/{id}/paid after confirmation. These details are available to the hosted service; the return URL grants access to the order. No customer name, email or billing address is explicitly included.
+* Hosted intents: only with the opt-in setting and REAL8_PAYMENT_INTENT_SECRET in wp-config.php, WordPress sends the order ID, token and USD amounts, asset code and issuer, public destination, memo, expiry and return URL INCLUDING the WooCommerce order access key to [https://api.real8.org/payment-intents](https://api.real8.org/payment-intents). It reports the intent ID and transaction hash to /payment-intents/{id}/paid after confirmation. These details are available to the hosted service; the return URL grants access to the order. No customer name, email or billing address is explicitly included.
 * Customers need a funded Stellar wallet holding REAL8 to send payment. Merchants without a hosted-service credential can use the complete local instruction flow.
-* Terms: https://real8.org/en/terms-of-service/
-* Privacy: https://real8.org/en/privacy-policy/
+* Terms: [https://real8.org/en/terms-of-service/](https://real8.org/en/terms-of-service/)
+* Privacy: [https://real8.org/en/privacy-policy/](https://real8.org/en/privacy-policy/)
 
 = Privacy and stored data =
 
@@ -82,6 +82,15 @@ The server checks Horizon before expiring a payment. Network errors leave it pen
 
 = Are subscriptions and automatic refunds supported? =
 The gateway supports one-time product payments. It does not automatically debit renewals or issue on-chain refunds. Some subscription plugins may permit manual renewal payments; test your combination before use.
+
+== Screenshots ==
+
+1. Gateway settings: enable the method, enter the public Stellar address and see on the spot whether the account exists, is funded and holds the REAL8 trustline.
+2. Checkout with "Pay with REAL8" selected, in the WooCommerce Checkout block.
+3. Payment instructions after placing the order: amount, destination address, unique memo, QR code, countdown and automatic payment check.
+4. Optional REAL8 equivalents next to the USD prices in the shop.
+5. The order in WooCommerce admin with the payment note: quoted amount, price, memo, address and expiry.
+6. REAL8 Payments in the WooCommerce payment providers list.
 
 == Changelog ==
 
