@@ -182,11 +182,11 @@ GPL v2 or later
 
 Developed by [REAL8](https://real8.org)
 
-## WordPress.org release preparation
+## Releasing to WordPress.org
 
 See [readme.txt](readme.txt) for external services, data sent and installation details.
 
-Build the upload ZIP with `python3 tools/build-release.py`. Only runtime files, translation files, readme and license notices enter `dist/real8-gateway-4.6.0.zip`; CI, directory banners and development tools are excluded. Run the official Plugin Check tool against the extracted ZIP, not the repository checkout.
+Build the release ZIP with `python3 tools/build-release.py`. Only runtime files, translation files, readme and license notices enter `dist/real8-gateway-<version>.zip`; CI, directory banners and development tools are excluded. Run the official Plugin Check tool against the extracted ZIP, not the repository checkout. The ZIP contents go to `trunk/` and `tags/<version>/` of the plugin's SVN repository, and the directory artwork in `assets/images/` to its `assets/`.
 
 The WordPress.org build uses WordPress.org updates and carries no updater of its own. Hosted payment redirects are an explicit opt-in for new installations; a store that already had `REAL8_PAYMENT_INTENT_SECRET` configured before upgrading keeps its redirect.
 
