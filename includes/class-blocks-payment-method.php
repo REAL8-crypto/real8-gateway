@@ -20,7 +20,7 @@ class REAL8_Blocks_Payment_Method extends \Automattic\WooCommerce\Blocks\Payment
         return ($this->settings['enabled'] ?? 'no') === 'yes'
             && !empty($this->settings['merchant_address'])
             && preg_match('/^G[A-Z2-7]{55}$/D', (string) $this->settings['merchant_address'])
-            && get_woocommerce_currency() === 'USD';
+            && REAL8_Token_Registry::is_store_currency(get_woocommerce_currency());
     }
 
     public function get_payment_method_script_handles() {

@@ -103,6 +103,31 @@ class REAL8_Token_Registry {
     private static $horizon_priced_tokens = array('EURC', 'SLVR', 'GOLD', 'WREAL8');
 
     /**
+     * Store currencies the gateway can quote in. Token prices are in USD;
+     * a EUR total is converted with the EURC/USDC order book on Stellar.
+     */
+    private static $store_currencies = array('USD', 'EUR');
+
+    /**
+     * Store currencies the gateway accepts
+     *
+     * @return array Currency codes
+     */
+    public static function get_store_currencies() {
+        return self::$store_currencies;
+    }
+
+    /**
+     * Whether the gateway can quote orders in this currency
+     *
+     * @param string $currency ISO code
+     * @return bool
+     */
+    public static function is_store_currency($currency) {
+        return in_array(strtoupper((string) $currency), self::$store_currencies, true);
+    }
+
+    /**
      * Get a single token by code
      *
      * @param string $code Token code (e.g., 'REAL8', 'XLM')

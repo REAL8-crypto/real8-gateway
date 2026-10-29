@@ -99,7 +99,7 @@ class REAL8_WC_Payment_Gateway extends WC_Payment_Gateway {
                 'title' => __('Enable/Disable', 'real8-gateway'),
                 'type' => 'checkbox',
                 'label' => __('Enable REAL8 Payments', 'real8-gateway'),
-                'description' => __('Enabling this service sends price requests to api.real8.org and your configured public wallet address to horizon.stellar.org for payment verification. Only USD orders are supported. See the plugin readme for external services and data details.', 'real8-gateway'),
+                'description' => __('Enabling this service sends price requests to api.real8.org and your configured public wallet address to horizon.stellar.org for payment verification. USD and EUR stores are supported; a EUR total is converted with the EURC/USDC market on Stellar. See the plugin readme for external services and data details.', 'real8-gateway'),
                 'default' => 'no',
             ),
             'payment_intents' => array(
@@ -184,7 +184,7 @@ class REAL8_WC_Payment_Gateway extends WC_Payment_Gateway {
             'show_shop_prices' => array(
                 'title'       => __('Show REAL8 prices in shop', 'real8-gateway'),
                 'type'        => 'checkbox',
-                'label'       => __('Show REAL8 equivalent next to USD prices', 'real8-gateway'),
+                'label'       => __('Show REAL8 equivalent next to shop prices', 'real8-gateway'),
                 'description' => __('Display REAL8 token equivalents below product prices throughout the shop.', 'real8-gateway'),
                 'default'     => 'yes',
                 'desc_tip'    => true,
@@ -240,7 +240,7 @@ class REAL8_WC_Payment_Gateway extends WC_Payment_Gateway {
      * Check if gateway is available
      */
     public function is_available() {
-        if ($this->enabled !== 'yes' || get_woocommerce_currency() !== 'USD') {
+        if ($this->enabled !== 'yes' || !REAL8_Token_Registry::is_store_currency(get_woocommerce_currency())) {
             return false;
         }
 
@@ -273,8 +273,8 @@ class REAL8_WC_Payment_Gateway extends WC_Payment_Gateway {
     public function process_payment($order_id) {
         $order = wc_get_order($order_id);
 
-        if (!$order || !$order->needs_payment() || $order->get_currency() !== 'USD' || !$this->is_available()) {
-            wc_add_notice(__('REAL8 Payments requires an unpaid USD order and a configured gateway.', 'real8-gateway'), 'error');
+        if (!$order || !$order->needs_payment() || !REAL8_Token_Registry::is_store_currency($order->get_currency()) || !$this->is_available()) {
+            wc_add_notice(__('REAL8 Payments requires an unpaid USD or EUR order and a configured gateway.', 'real8-gateway'), 'error');
             return array('result' => 'fail');
         }
 
@@ -409,7 +409,7 @@ class REAL8_WC_Payment_Gateway extends WC_Payment_Gateway {
             } else {
                 // Calculate token amount fresh (first quote for this order
                 // or the previous lock has hard-expired).
-                $calculation = $this->stellar_api->calculate_token_amount($order_total, $selected_token, true);
+                $calculation = $this->stellar_api->calculate_token_amount($order_total, $selected_token, true, $order->get_currency());
 
                 if (is_wp_error($calculation)) {
                     wc_add_notice(__('Unable to calculate payment amount. Please try again.', 'real8-gateway'), 'error');
@@ -420,6 +420,9 @@ class REAL8_WC_Payment_Gateway extends WC_Payment_Gateway {
                 $expires_at = gmdate('Y-m-d H:i:s', time() + ($this->payment_timeout * 60));
                 $token_amount = $calculation['token_amount'];
                 $token_price = $calculation['price_per_token'];
+                // USD value of the quote, for the hosted wallet. The payment
+                // row keeps the order total in the order's own currency.
+                $order->update_meta_data('_stellar_quote_usd', number_format((float) $calculation['usd_amount'], 2, '.', ''));
 
                 $memo = $this->stellar_api->generate_payment_memo($order_id);
             }
@@ -433,6 +436,9 @@ class REAL8_WC_Payment_Gateway extends WC_Payment_Gateway {
                 'asset_code' => $selected_token,
                 'asset_issuer' => $token['issuer'],
                 'amount_token' => number_format((float) $token_amount, 7, '.', ''),
+                // Order total in the order's currency (USD or, since 4.7.0,
+                // EUR); every "order changed after quoting" check compares
+                // this column with the order total.
                 'amount_usd' => $order_total,
                 'token_price' => number_format((float) $token_price, 8, '.', ''),
                 'merchant_address' => $this->merchant_address,
@@ -547,10 +553,21 @@ class REAL8_WC_Payment_Gateway extends WC_Payment_Gateway {
             return null;
         }
 
+        // The hosted wallet shows a dollar figure. A USD order sends its total;
+        // a EUR order sends the USD value saved with the quote, or the token
+        // amount at the quoted price when a reused lock predates 4.7.0.
+        $amount_usd = (float) $order->get_total();
+        if ($order->get_currency() !== 'USD') {
+            $quote_usd = $order->get_meta('_stellar_quote_usd');
+            $amount_usd = is_numeric($quote_usd) && (float) $quote_usd > 0
+                ? (float) $quote_usd
+                : (float) $token_amount * (float) $order->get_meta('_stellar_payment_price');
+        }
+
         $body = wp_json_encode(array(
             'order_id'        => $order->get_id(),
             'amount_token'    => number_format((float) $token_amount, 7, '.', ''),
-            'amount_usd'      => number_format((float) $order->get_total(), 2, '.', ''),
+            'amount_usd'      => number_format($amount_usd, 2, '.', ''),
             'asset_code'      => $asset_code,
             'asset_issuer'    => $token['issuer'] ?? '',
             'destination'     => $this->merchant_address,
@@ -910,9 +927,12 @@ class REAL8_WC_Payment_Gateway extends WC_Payment_Gateway {
             $tokens = array('REAL8');
         }
         $prices = $this->stellar_api->get_all_token_prices($tokens);
+        $rate = $this->stellar_api->get_fiat_usd_rate(get_woocommerce_currency());
 
         wp_send_json_success(array(
-            'prices' => $prices,
+            'prices' => $prices, // USD per token
+            'currency' => get_woocommerce_currency(),
+            'fiat_usd_rate' => is_wp_error($rate) ? null : $rate,
         ));
     }
 

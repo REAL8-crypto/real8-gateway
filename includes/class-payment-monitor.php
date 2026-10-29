@@ -447,7 +447,7 @@ class REAL8_Payment_Monitor {
 
             // A quote covers the order total and currency saved with the payment.
             // Editing the order after quoting requires reconciliation, not automatic fulfilment.
-            if ($order->get_currency() !== 'USD' || $order->get_payment_method() !== 'real8_payment' || abs((float) $order->get_total() - (float) $payment->amount_usd) > 0.005) {
+            if (!REAL8_Token_Registry::is_store_currency($order->get_currency()) || $order->get_payment_method() !== 'real8_payment' || abs((float) $order->get_total() - (float) $payment->amount_usd) > 0.005) {
                 $order->update_meta_data('_real8_manual_review', 'yes');
                 $order->add_order_note(__('REAL8 payment received, but the order changed after quoting. Review the payment before fulfilling this order.', 'real8-gateway'));
                 if (!$order->is_paid() && !$order->has_status('refunded')) {
