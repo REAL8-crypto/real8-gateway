@@ -1,6 +1,9 @@
 # REAL8 Gateway
 
-![WordPress Plugin](https://img.shields.io/badge/WordPress-Plugin-blue.svg)
+[![REAL8 Gateway](assets/images/banner-1544x500.png)](https://wordpress.org/plugins/real8-gateway/)
+
+[![WordPress.org plugin](https://img.shields.io/wordpress/plugin/v/real8-gateway?label=WordPress.org)](https://wordpress.org/plugins/real8-gateway/)
+[![Downloads](https://img.shields.io/wordpress/plugin/dt/real8-gateway)](https://wordpress.org/plugins/real8-gateway/advanced/)
 ![Version](https://img.shields.io/badge/version-4.7.0-green.svg)
 ![License](https://img.shields.io/badge/license-GPL--2.0%2B-blue.svg)
 ![PHP](https://img.shields.io/badge/PHP-7.4%2B-purple.svg)
@@ -9,6 +12,8 @@
 ![Stellar](https://img.shields.io/badge/Stellar-Blockchain-brightgreen.svg)
 
 Accept REAL8 token payments on the Stellar blockchain for your WooCommerce store.
+
+**Available on WordPress.org:** https://wordpress.org/plugins/real8-gateway/
 
 ## Description
 
@@ -37,11 +42,21 @@ REAL8 Gateway enables WooCommerce merchants to accept REAL8 tokens as payment. C
 
 ## Installation
 
-1. Upload the `real8-gateway` folder to `/wp-content/plugins/`
-2. Activate the plugin through the 'Plugins' menu in WordPress
+### From WordPress.org (recommended)
+
+1. In your WordPress admin go to Plugins > Add New Plugin and search for "REAL8 Gateway", or download it from https://wordpress.org/plugins/real8-gateway/
+2. Install and activate the plugin
 3. Go to WooCommerce > Settings > Payments > REAL8 Payment
 4. Configure your merchant Stellar address and read the external-service disclosures
 5. Enable the payment method
+
+Updates are delivered through WordPress.org like any other directory plugin.
+
+### From this repository
+
+1. Build the ZIP with `python3 tools/build-release.py` (or download the source as a ZIP)
+2. Upload it under Plugins > Add New Plugin > Upload Plugin, or copy the `real8-gateway` folder to `/wp-content/plugins/`
+3. Continue from step 3 above
 
 ## Merchant Wallet Setup
 
@@ -153,6 +168,8 @@ The plugin fetches real-time REAL8 prices from `https://api.real8.org/prices`.
 
 ## Support
 
+- WordPress.org listing: https://wordpress.org/plugins/real8-gateway/
+- Support forum: https://wordpress.org/support/plugin/real8-gateway/
 - Website: https://real8.org
 - Documentation: https://api.real8.org
 - Issues: https://github.com/REAL8-crypto/real8-gateway/issues
