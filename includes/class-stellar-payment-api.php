@@ -519,24 +519,96 @@ class REAL8_Stellar_Payment_API {
     }
 
     /**
-     * Calculate token amount for given USD amount
+     * USD per unit of a store currency.
      *
-     * @param float $usd_amount Amount in USD
+     * USD is 1. EUR comes from the EURC/USDC order book on Stellar (Circle's
+     * EURC sold for Circle's USDC, mid of best bid and ask), cached for
+     * PRICE_CACHE_DURATION like the token prices. No other currency is
+     * supported, and no rate is ever guessed.
+     *
+     * @param string $currency ISO code
+     * @return float|WP_Error USD per unit, or error
+     */
+    public function get_fiat_usd_rate($currency) {
+        $currency = strtoupper((string) $currency);
+        if ($currency === 'USD') {
+            return 1.0;
+        }
+        if ($currency !== 'EUR') {
+            return new WP_Error('unsupported_currency', sprintf(
+                /* translators: %s: currency code */
+                __('REAL8 Payments cannot quote orders in %s.', 'real8-gateway'),
+                $currency
+            ));
+        }
+
+        $cache_key = 'stellar_gw_rate_eur_usd';
+        $cached = get_transient($cache_key);
+        if ($cached !== false && is_numeric($cached) && (float) $cached > 0) {
+            return (float) $cached;
+        }
+
+        $rate = $this->fetch_orderbook_price('EURC', 'USDC');
+        if (is_wp_error($rate)) {
+            return $rate;
+        }
+        // A broken or empty book must not price an order: EUR/USD outside
+        // this band has not happened since the euro exists.
+        if (!is_numeric($rate) || !is_finite((float) $rate) || (float) $rate < 0.5 || (float) $rate > 2.0) {
+            return new WP_Error('invalid_rate', __('The EURC/USDC market returned an implausible euro rate.', 'real8-gateway'));
+        }
+        set_transient($cache_key, (float) $rate, self::PRICE_CACHE_DURATION);
+        return (float) $rate;
+    }
+
+    /**
+     * Token price expressed in a store currency (USD price divided by the
+     * currency's USD rate). Used for the shop equivalents.
+     *
+     * @param string $token_code Token code
+     * @param string $currency Store currency
+     * @return float|WP_Error
+     */
+    public function get_token_price_in($token_code, $currency) {
+        $price = $this->get_token_price($token_code);
+        if (is_wp_error($price)) {
+            return $price;
+        }
+        $rate = $this->get_fiat_usd_rate($currency);
+        if (is_wp_error($rate)) {
+            return $rate;
+        }
+        return $price / $rate;
+    }
+
+    /**
+     * Calculate token amount for an order total
+     *
+     * @param float $amount Order total in $currency
      * @param string $token_code Token code
      * @param bool $include_buffer Include price buffer for volatility
+     * @param string $currency Currency of $amount (USD or EUR)
      * @return array|WP_Error Array with amount and price details or error
      */
-    public function calculate_token_amount($usd_amount, $token_code, $include_buffer = true) {
+    public function calculate_token_amount($amount, $token_code, $include_buffer = true, $currency = 'USD') {
         $token_code = strtoupper($token_code);
+        $currency = strtoupper((string) $currency);
         $price = $this->get_token_price($token_code);
 
         if (is_wp_error($price)) {
             return $price;
         }
 
-        if (!is_numeric($usd_amount) || !is_finite((float) $usd_amount) || (float) $usd_amount <= 0) {
+        if (!is_numeric($amount) || !is_finite((float) $amount) || (float) $amount <= 0) {
             return new WP_Error('invalid_amount', __('The payment total must be greater than zero.', 'real8-gateway'));
         }
+
+        $rate = $this->get_fiat_usd_rate($currency);
+        if (is_wp_error($rate)) {
+            return $rate;
+        }
+        $usd_amount = (float) $amount * $rate;
+
         $settings = get_option('woocommerce_real8_payment_settings', array());
         $buffer = max(0.0, min(10.0, (float) ($settings['price_buffer'] ?? REAL8_GW_PRICE_BUFFER_PERCENT)));
         $buffer_multiplier = $include_buffer ? (1 - ($buffer / 100)) : 1;
@@ -547,6 +619,9 @@ class REAL8_Stellar_Payment_API {
         return array(
             'token_amount' => round($token_amount, 7), // Stellar supports 7 decimals
             'token_code' => $token_code,
+            'amount' => (float) $amount,
+            'currency' => $currency,
+            'fiat_usd_rate' => $rate,
             'usd_amount' => $usd_amount,
             'price_per_token' => $price,
             'effective_price' => $effective_price,

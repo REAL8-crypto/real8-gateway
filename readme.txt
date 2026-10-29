@@ -5,11 +5,11 @@ Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 7.4
 Requires Plugins: woocommerce
-Stable tag: 4.6.2
+Stable tag: 4.7.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Accept REAL8 token payments on Stellar for USD WooCommerce orders, with local payment instructions and automatic verification.
+Accept REAL8 token payments on Stellar for USD and EUR WooCommerce orders, with local payment instructions and automatic verification.
 
 == Description ==
 
@@ -17,7 +17,7 @@ REAL8 Gateway is built for REAL8, the Stellar asset of the REAL8 Project. This v
 
 REAL8 Gateway adds a REAL8 payment method to WooCommerce's classic checkout and Checkout block. Customers send REAL8 directly to the merchant's public Stellar address with a unique text memo. WordPress verifies the transaction using Stellar Horizon and marks the WooCommerce order paid.
 
-Requirements: WooCommerce 8.3 or later, a USD store, and a funded Stellar mainnet account with a REAL8 trustline. This plugin does not hold funds or ask for private keys. Refunds are handled manually in the merchant's wallet; recording a WooCommerce refund does not send tokens.
+Requirements: WooCommerce 8.3 or later, a USD or EUR store, and a funded Stellar mainnet account with a REAL8 trustline. This plugin does not hold funds or ask for private keys. Refunds are handled manually in the merchant's wallet; recording a WooCommerce refund does not send tokens.
 
 Features include a configurable payment window, price buffer, bounded underpayment tolerance, optional REAL8 price equivalents, local QR codes and payment instructions in order emails. High-Performance Order Storage is supported. New quotes require a valid price; an unavailable pricing service does not use a hardcoded or indefinitely stale rate.
 
@@ -39,9 +39,9 @@ REAL8 pricing API ([api.real8.org](https://api.real8.org))
 * Privacy: [https://real8.org/en/privacy-policy/](https://real8.org/en/privacy-policy/)
 
 Stellar Horizon ([horizon.stellar.org](https://horizon.stellar.org))
-* Purpose: validate the configured merchant wallet and verify incoming payments.
-* When: after a public address has been saved in settings, every minute while payments await verification, and during customer payment status checks.
-* Sent: merchant public Stellar address, transaction hashes and pagination parameters. Asset code and issuer may be used for orderbook requests by the legacy token API.
+* Purpose: validate the configured merchant wallet, verify incoming payments and, in EUR stores, read the euro rate from the EURC/USDC order book (Circle's EURC and USDC).
+* When: after a public address has been saved in settings, every minute while payments await verification, during customer payment status checks, and for EUR quotes and price equivalents (rate cached for 60 seconds).
+* Sent: merchant public Stellar address, transaction hashes and pagination parameters. Order-book requests carry only the two asset codes and issuers.
 * No account or API key is required. Transaction data, addresses and text memos on Stellar are public and permanent.
 * Documentation: [https://developers.stellar.org/docs/data/apis/horizon](https://developers.stellar.org/docs/data/apis/horizon)
 * Terms: [https://stellar.org/terms-of-service](https://stellar.org/terms-of-service)
@@ -62,7 +62,7 @@ The plugin stores payment records in the site's database: order ID, memo, expect
 
 == Installation ==
 
-1. Install and activate WooCommerce 8.3 or later. Set your store currency to USD.
+1. Install and activate WooCommerce 8.3 or later. Set your store currency to USD or EUR.
 2. Upload the plugin ZIP in Plugins > Add New and activate it.
 3. Open WooCommerce > Settings > Payments > REAL8 Payments.
 4. Save your public Stellar address. Add a REAL8 trustline for issuer GBVYYQ7XXRZW6ZCNNCL2X2THNPQ6IM4O47HAA25JTAG7Z3CXJCQ3W4CD using your wallet. Keep enough XLM to meet the network's account and trustline reserves.
@@ -72,7 +72,7 @@ The plugin stores payment records in the site's database: order ID, memo, expect
 == Frequently Asked Questions ==
 
 = Does this work in currencies other than USD? =
-No. The gateway and REAL8 price equivalents are disabled for other store currencies. The plugin does not provide foreign-exchange conversion.
+USD and EUR stores are supported. REAL8 is priced in USD; a EUR order total is converted with the mid price of the EURC/USDC order book on Stellar at the moment of the quote, and the REAL8 equivalents in the shop use the same rate. The gateway and the equivalents are disabled for any other store currency.
 
 = Do I need a REAL8 service credential? =
 No for local payment instructions, prices and Stellar verification. The optional hosted wallet redirect requires REAL8_PAYMENT_INTENT_SECRET in wp-config.php and the hosted redirect checkbox. Obtain service access before configuring this credential; never put a secret in the plugin files.
@@ -88,11 +88,15 @@ The gateway supports one-time product payments. It does not automatically debit 
 1. Gateway settings: enable the method, enter the public Stellar address and see on the spot whether the account exists, is funded and holds the REAL8 trustline.
 2. Checkout with "Pay with REAL8" selected, in the WooCommerce Checkout block.
 3. Payment instructions after placing the order: amount, destination address, unique memo, QR code, countdown and automatic payment check.
-4. Optional REAL8 equivalents next to the USD prices in the shop.
+4. Optional REAL8 equivalents next to the prices in the shop.
 5. The order in WooCommerce admin with the payment note: quoted amount, price, memo, address and expiry.
 6. REAL8 Payments in the WooCommerce payment providers list.
 
 == Changelog ==
+
+= 4.7.0 =
+* EUR stores are supported next to USD. A EUR order total is converted with the EURC/USDC order book on Stellar; REAL8 equivalents in the shop use the same rate.
+* Hosted wallet intents for EUR orders carry the USD value of the quote.
 
 = 4.6.2 =
 * Removed the WooCommerce-missing admin notice; WordPress enforces the dependency through the plugin header.

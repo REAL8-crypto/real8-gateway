@@ -2,10 +2,10 @@
 /**
  * REAL8 Price Display
  *
- * Displays REAL8 token equivalents alongside USD prices throughout WooCommerce.
+ * Displays REAL8 token equivalents alongside shop prices (USD or EUR) throughout WooCommerce.
  *
  * @package REAL8_Gateway
- * @version 4.3.6
+ * @version 4.7.0
  */
 
 if (!defined('ABSPATH')) {
@@ -49,7 +49,7 @@ class REAL8_Price_Display {
     private function __construct() {
         // Check if gateway is enabled first
         $gateway_enabled = get_option('woocommerce_real8_payment_settings');
-        if (get_woocommerce_currency() !== 'USD' || !$gateway_enabled || (isset($gateway_enabled['enabled']) && $gateway_enabled['enabled'] !== 'yes')) {
+        if (!REAL8_Token_Registry::is_store_currency(get_woocommerce_currency()) || !$gateway_enabled || (isset($gateway_enabled['enabled']) && $gateway_enabled['enabled'] !== 'yes')) {
             return;
         }
 
@@ -92,7 +92,7 @@ class REAL8_Price_Display {
     }
 
     /**
-     * Get REAL8 price (cached for the request)
+     * Get REAL8 price in the store currency (cached for the request)
      *
      * @return float|false Price or false on error
      */
@@ -101,7 +101,7 @@ class REAL8_Price_Display {
             return $this->real8_price;
         }
 
-        $price = $this->stellar_api->get_token_price('REAL8');
+        $price = $this->stellar_api->get_token_price_in('REAL8', get_woocommerce_currency());
 
         if (is_wp_error($price) || $price <= 0) {
             $this->real8_price = false;
@@ -133,17 +133,17 @@ class REAL8_Price_Display {
     /**
      * Generate REAL8 price HTML
      *
-     * @param float $usd_amount Amount in USD
+     * @param float $amount Amount in the store currency
      * @return string HTML for REAL8 equivalent
      */
-    private function get_real8_html($usd_amount) {
+    private function get_real8_html($amount) {
         $real8_price = $this->get_real8_price();
 
-        if (!$real8_price || $usd_amount <= 0) {
+        if (!$real8_price || $amount <= 0) {
             return '';
         }
 
-        $real8_amount = $usd_amount / $real8_price;
+        $real8_amount = $amount / $real8_price;
         $formatted = $this->format_real8_amount($real8_amount);
 
         return '<span class="real8-equivalent">&asymp; ' . esc_html($formatted) . ' $REAL8</span>';

@@ -1,7 +1,7 @@
 # REAL8 Gateway
 
 ![WordPress Plugin](https://img.shields.io/badge/WordPress-Plugin-blue.svg)
-![Version](https://img.shields.io/badge/version-4.6.2-green.svg)
+![Version](https://img.shields.io/badge/version-4.7.0-green.svg)
 ![License](https://img.shields.io/badge/license-GPL--2.0%2B-blue.svg)
 ![PHP](https://img.shields.io/badge/PHP-7.4%2B-purple.svg)
 ![WordPress](https://img.shields.io/badge/WordPress-6.5%2B-0073aa.svg)
@@ -17,7 +17,7 @@ REAL8 Gateway enables WooCommerce merchants to accept REAL8 tokens as payment. C
 ### Features
 
 - **Easy Setup**: Configure your Stellar address and start accepting payments
-- **Real-time Pricing**: Fetches current REAL8/USD price from api.real8.org
+- **Real-time Pricing**: Fetches current REAL8/USD price from api.real8.org; EUR stores are converted with the EURC/USDC order book on Stellar
 - **Wallet Validation**: Admin panel shows wallet status (exists, funded, trustline)
 - **Automatic Detection**: Monitors the Stellar blockchain for incoming payments
 - **Unique Memos**: Each order gets a unique memo for accurate payment matching
@@ -32,7 +32,7 @@ REAL8 Gateway enables WooCommerce merchants to accept REAL8 tokens as payment. C
 - WordPress 6.5+
 - WooCommerce 8.3+
 - PHP 7.4+
-- USD store currency
+- USD or EUR store currency
 - A Stellar wallet with REAL8 trustline
 
 ## Installation

@@ -5,6 +5,16 @@ All notable changes to REAL8 Gateway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.0] - 2026-10-29
+
+### Added
+- EUR store currency. REAL8 stays priced in USD; a EUR order total is converted with the mid price of the EURC/USDC order book on Stellar (`REAL8_Stellar_Payment_API::get_fiat_usd_rate()`, cached 60 s, refused outside 0.5 to 2.0 USD per EUR). Shop equivalents divide by the REAL8 price in the store currency. `calculate_token_amount()` takes the currency as a fourth argument.
+- `_stellar_quote_usd` order meta with the USD value of the quote; hosted payment intents for EUR orders send it as `amount_usd`.
+
+### Changed
+- The payment row's `amount_usd` column holds the order total in the order's own currency (unchanged for USD stores); the "order changed after quoting" checks compare it with the order total as before.
+- Settings and notices say USD or EUR instead of USD only.
+
 ## [4.6.2] - 2026-10-11
 
 ### Removed
