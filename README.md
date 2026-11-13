@@ -14,6 +14,7 @@
 Accept REAL8 token payments on the Stellar blockchain for your WooCommerce store.
 
 **Available on WordPress.org:** https://wordpress.org/plugins/real8-gateway/
+**Quick User Guide:** https://real8.org/en/real8-gateway-is-now-on-wordpress-org/
 
 ## Description
 
